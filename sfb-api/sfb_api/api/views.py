@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timezone
 from rest_framework.decorators import api_view
@@ -20,44 +21,62 @@ def health_check(request):
 @api_view(['GET'])
 def match_list(request):
     """List matches with optional filters: status, section_id, min_confidence."""
-    sb = get_supabase()
-    query = sb.table('matches').select(
-        '*, buyer_posts(username, post_text, source_platform), '
-        'seller_listings(username, listing_text, source_platform), '
-        'sections(name)'
-    ).order('created_at', desc=True)
+    try:
+        sb = get_supabase()
+        query = sb.table('matches').select(
+            '*, buyer_posts(username, post_text, source_platform), '
+            'seller_listings(username, listing_text, source_platform), '
+            'sections(name)'
+        ).order('created_at', desc=True)
 
-    # Filters
-    match_status = request.query_params.get('status')
-    if match_status:
-        query = query.eq('status', match_status)
+        # Filters
+        match_status = request.query_params.get('status')
+        if match_status:
+            query = query.eq('status', match_status)
 
-    section_id = request.query_params.get('section_id')
-    if section_id:
-        query = query.eq('section_id', section_id)
+        section_id = request.query_params.get('section_id')
+        if section_id:
+            query = query.eq('section_id', section_id)
 
-    min_confidence = request.query_params.get('min_confidence')
-    if min_confidence:
-        query = query.gte('confidence', int(min_confidence))
+        min_confidence = request.query_params.get('min_confidence')
+        if min_confidence:
+            query = query.gte('confidence', int(min_confidence))
 
-    # Pagination
-    limit = int(request.query_params.get('limit', 50))
-    offset = int(request.query_params.get('offset', 0))
-    query = query.range(offset, offset + limit - 1)
+        # Pagination
+        limit = int(request.query_params.get('limit', 50))
+        offset = int(request.query_params.get('offset', 0))
+        query = query.range(offset, offset + limit - 1)
 
-    result = query.execute()
-    return Response({"matches": result.data, "count": len(result.data)})
+        result = query.execute()
+        return Response({"matches": result.data, "count": len(result.data)})
+
+    except Exception as e:
+        # Return empty list rather than 500 — Lovable falls back to demo data
+        return Response({"matches": [], "count": 0, "error": str(e)})
 
 
 @api_view(['GET'])
 def match_detail(request, match_id):
     """Get a single match with full AI analysis."""
-    sb = get_supabase()
-    result = sb.table('matches').select(
-        '*, buyer_posts(*), seller_listings(*), sections(name)'
-    ).eq('id', match_id).single().execute()
+    try:
+        sb = get_supabase()
+        result = sb.table('matches').select(
+            '*, buyer_posts(*), seller_listings(*), sections(name)'
+        ).eq('id', match_id).execute()
 
-    return Response(result.data)
+        if not result.data:
+            return Response(
+                {"error": "Match not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(result.data[0])
+
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['POST'])
@@ -72,29 +91,29 @@ def match_action(request, match_id):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    sb = get_supabase()
+    try:
+        sb = get_supabase()
 
-    # Map action to match status
-    status_map = {
-        'approved': 'approved',
-        'rejected': 'rejected',
-        'flagged': 'flagged',
-    }
+        # Update match status
+        sb.table('matches').update({
+            'status': action
+        }).eq('id', match_id).execute()
 
-    # Update match status
-    sb.table('matches').update({
-        'status': status_map[action]
-    }).eq('id', match_id).execute()
+        # Log the action
+        sb.table('match_actions').insert({
+            'match_id': match_id,
+            'action': action,
+            'notes': notes,
+            'acted_at': datetime.now(timezone.utc).isoformat(),
+        }).execute()
 
-    # Log the action
-    sb.table('match_actions').insert({
-        'match_id': match_id,
-        'action': action,
-        'notes': notes,
-        'acted_at': datetime.now(timezone.utc).isoformat(),
-    }).execute()
+        return Response({"success": True, "match_id": match_id, "action": action})
 
-    return Response({"success": True, "match_id": match_id, "action": action})
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 # ── Sections ──
@@ -102,9 +121,13 @@ def match_action(request, match_id):
 @api_view(['GET'])
 def section_list(request):
     """List all sections with match counts."""
-    sb = get_supabase()
-    result = sb.table('sections').select('*').order('name').execute()
-    return Response({"sections": result.data})
+    try:
+        sb = get_supabase()
+        result = sb.table('sections').select('*').order('name').execute()
+        return Response({"sections": result.data})
+
+    except Exception as e:
+        return Response({"sections": [], "error": str(e)})
 
 
 # ── Listings ──
@@ -112,43 +135,51 @@ def section_list(request):
 @api_view(['GET'])
 def buyer_list(request):
     """List buyer posts with optional make/model filter."""
-    sb = get_supabase()
-    query = sb.table('buyer_posts').select('*').order('scraped_at', desc=True)
+    try:
+        sb = get_supabase()
+        query = sb.table('buyer_posts').select('*').order('scraped_at', desc=True)
 
-    make = request.query_params.get('make')
-    if make:
-        query = query.ilike('make', f'%{make}%')
+        make = request.query_params.get('make')
+        if make:
+            query = query.ilike('make', f'%{make}%')
 
-    model = request.query_params.get('model')
-    if model:
-        query = query.ilike('model', f'%{model}%')
+        model = request.query_params.get('model')
+        if model:
+            query = query.ilike('model', f'%{model}%')
 
-    limit = int(request.query_params.get('limit', 50))
-    query = query.limit(limit)
+        limit = int(request.query_params.get('limit', 50))
+        query = query.limit(limit)
 
-    result = query.execute()
-    return Response({"buyers": result.data, "count": len(result.data)})
+        result = query.execute()
+        return Response({"buyers": result.data, "count": len(result.data)})
+
+    except Exception as e:
+        return Response({"buyers": [], "count": 0, "error": str(e)})
 
 
 @api_view(['GET'])
 def seller_list(request):
     """List seller listings with optional make/model filter."""
-    sb = get_supabase()
-    query = sb.table('seller_listings').select('*').order('scraped_at', desc=True)
+    try:
+        sb = get_supabase()
+        query = sb.table('seller_listings').select('*').order('scraped_at', desc=True)
 
-    make = request.query_params.get('make')
-    if make:
-        query = query.ilike('make', f'%{make}%')
+        make = request.query_params.get('make')
+        if make:
+            query = query.ilike('make', f'%{make}%')
 
-    model = request.query_params.get('model')
-    if model:
-        query = query.ilike('model', f'%{model}%')
+        model = request.query_params.get('model')
+        if model:
+            query = query.ilike('model', f'%{model}%')
 
-    limit = int(request.query_params.get('limit', 50))
-    query = query.limit(limit)
+        limit = int(request.query_params.get('limit', 50))
+        query = query.limit(limit)
 
-    result = query.execute()
-    return Response({"sellers": result.data, "count": len(result.data)})
+        result = query.execute()
+        return Response({"sellers": result.data, "count": len(result.data)})
+
+    except Exception as e:
+        return Response({"sellers": [], "count": 0, "error": str(e)})
 
 
 # ── Seeker ──
@@ -179,10 +210,9 @@ def seeker_run(request):
     _seeker_state["last_run"] = datetime.now(timezone.utc).isoformat()
 
     # TODO: In production, trigger the real Seeker pipeline here:
-    # - Scrape configured sources (eBay, forums, Facebook, Craigslist)
-    # - Extract structured data (make, model, part, year, price)
-    # - Store in Supabase buyer_posts and seller_listings
-    # - Trigger matcher on new posts
+    # - Write a 'pending' row to Supabase seeker_runs table
+    # - PC polling script picks it up and launches the Seeker
+    # - Bridge adapter pushes results to Supabase when done
 
     _seeker_state["status"] = "completed"
     _seeker_state["posts_found"] = 0  # Will be real count in production
@@ -223,39 +253,42 @@ def match_analyze(request):
     # Optionally store the match in Supabase
     store = request.data.get('store', False)
     if store and result.get('match'):
-        sb = get_supabase()
+        try:
+            sb = get_supabase()
 
-        # Store buyer post
-        buyer = sb.table('buyer_posts').insert({
-            'post_text': buyer_text,
-            'make': result.get('make', ''),
-            'model': result.get('model', ''),
-            'part': result.get('part', ''),
-            'year_range': result.get('buyer_years', ''),
-        }).execute()
+            # Store buyer post
+            buyer = sb.table('buyer_posts').insert({
+                'post_text': buyer_text,
+                'make': result.get('make', ''),
+                'model': result.get('model', ''),
+                'part': result.get('part', ''),
+                'year_range': result.get('buyer_years', ''),
+            }).execute()
 
-        # Store seller listing
-        seller = sb.table('seller_listings').insert({
-            'listing_text': seller_text,
-            'make': result.get('make', ''),
-            'model': result.get('model', ''),
-            'part': result.get('part', ''),
-            'year': result.get('seller_years', ''),
-        }).execute()
+            # Store seller listing
+            seller = sb.table('seller_listings').insert({
+                'listing_text': seller_text,
+                'make': result.get('make', ''),
+                'model': result.get('model', ''),
+                'part': result.get('part', ''),
+                'year': result.get('seller_years', ''),
+            }).execute()
 
-        # Store match
-        sb.table('matches').insert({
-            'buyer_post_id': buyer.data[0]['id'],
-            'seller_listing_id': seller.data[0]['id'],
-            'ai_reasoning': result.get('reasoning', ''),
-            'confidence': result.get('confidence', 0),
-            'match_decision': 'send' if result.get('match') else 'no_send',
-            'status': 'pending_review',
-            'make': result.get('make', ''),
-            'model': result.get('model', ''),
-            'part': result.get('part', ''),
-            'buyer_years': result.get('buyer_years', ''),
-            'seller_years': result.get('seller_years', ''),
-        }).execute()
+            # Store match
+            sb.table('matches').insert({
+                'buyer_post_id': buyer.data[0]['id'],
+                'seller_listing_id': seller.data[0]['id'],
+                'ai_reasoning': result.get('reasoning', ''),
+                'confidence': result.get('confidence', 0),
+                'match_decision': 'send' if result.get('match') else 'no_send',
+                'status': 'pending_review',
+                'make': result.get('make', ''),
+                'model': result.get('model', ''),
+                'part': result.get('part', ''),
+                'buyer_years': result.get('buyer_years', ''),
+                'seller_years': result.get('seller_years', ''),
+            }).execute()
+        except Exception:
+            pass  # Don't fail the analysis response if storage fails
 
     return Response({"analysis": result})
