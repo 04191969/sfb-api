@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,16 +38,18 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'sfb_api.api.permissions.SfbApiKeyPermission',
     ],
 }
 
 # CORS — allow Lovable frontend
 CORS_ALLOWED_ORIGINS = [
     'https://sfb-demo.lovable.app',
+    'https://bright-web-workshop-37.lovable.app',
     'http://localhost:5173',
     'http://localhost:3000',
 ]
+CORS_ALLOW_HEADERS = (*default_headers, 'x-sfb-key')
 CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL', 'False').lower() == 'true'
 
 # Supabase
@@ -55,6 +59,9 @@ SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')  # service_role key
 # OpenAI
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+
+# Shared secret between Lovable and this API. Unset means the check is off.
+SFB_API_SECRET = os.environ.get('SFB_API_SECRET', '')
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
