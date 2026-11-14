@@ -1,4 +1,3 @@
-
 import uuid
 from datetime import datetime, timezone
 from rest_framework.decorators import api_view
@@ -184,44 +183,62 @@ def seller_list(request):
 
 # ── Seeker ──
 
-# In-memory tracker for demo (in production, use a database or Redis)
-_seeker_state = {
-    "last_run": None,
-    "posts_found": 0,
-    "status": "idle",
-    "next_scheduled": None,
-}
-
-
 @api_view(['GET'])
 def seeker_status(request):
-    """Return the current Seeker pipeline status."""
-    return Response(_seeker_state)
+    """Return the current Seeker pipeline status from Supabase."""
+    try:
+        sb = get_supabase()
+        result = sb.table('seeker_runs').select('*').order(
+            'requested_at', desc=True
+        ).limit(1).execute()
+        if result.data:
+            latest = result.data[0]
+            return Response({
+                "status": latest["status"],
+                "last_run": latest.get("completed_at") or latest.get("started_at") or latest.get("requested_at"),
+                "run_id": latest["id"],
+                "search_query": latest.get("search_query"),
+                "result_summary": latest.get("result_summary"),
+                "error_message": latest.get("error_message"),
+            })
+        else:
+            return Response({"status": "idle", "last_run": None, "run_id": None})
+    except Exception as e:
+        return Response({"status": "idle", "last_run": None, "error": str(e)})
 
 
 @api_view(['POST'])
 def seeker_run(request):
-    """Trigger a Seeker scrape run.
-
-    For the demo, this is a placeholder that shows the flow works.
-    In production, this kicks off the real Seeker pipeline.
-    """
-    _seeker_state["status"] = "running"
-    _seeker_state["last_run"] = datetime.now(timezone.utc).isoformat()
-
-    # TODO: In production, trigger the real Seeker pipeline here:
-    # - Write a 'pending' row to Supabase seeker_runs table
-    # - PC polling script picks it up and launches the Seeker
-    # - Bridge adapter pushes results to Supabase when done
-
-    _seeker_state["status"] = "completed"
-    _seeker_state["posts_found"] = 0  # Will be real count in production
-
-    return Response({
-        "success": True,
-        "message": "Seeker run triggered",
-        "status": _seeker_state
-    })
+    """Queue a Seeker run in Supabase for the PC polling script to pick up."""
+    search_query = request.data.get('search_query', '')
+    try:
+        sb = get_supabase()
+        # Check for already-active runs
+        active = sb.table('seeker_runs').select('id, status').in_(
+            'status', ['pending', 'running']
+        ).execute()
+        if active.data:
+            return Response({
+                "success": False,
+                "message": "A Seeker run is already in progress",
+                "run_id": active.data[0]["id"],
+                "status": active.data[0]["status"],
+            })
+        # Insert new pending run
+        result = sb.table('seeker_runs').insert({
+            "status": "pending",
+            "search_query": search_query,
+            "requested_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+        run_id = result.data[0]["id"]
+        return Response({
+            "success": True,
+            "message": "Seeker run queued — your PC will pick it up shortly",
+            "run_id": run_id,
+            "status": "pending",
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ── Live Matcher ──
