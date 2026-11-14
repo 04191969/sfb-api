@@ -46,7 +46,7 @@ def match_list(request):
         if min_confidence:
             query = query.gte("confidence", int(min_confidence))
 
-        limit = int(request.query_params.get("limit", 50))
+        limit = min(int(request.query_params.get("limit", 1000)), 1000)
         offset = int(request.query_params.get("offset", 0))
         query = query.range(offset, offset + limit - 1)
 
