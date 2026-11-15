@@ -57,7 +57,8 @@ Rules:
 LISTING_SYSTEM = """You extract car-part listings from search snippets.
 Return ONLY valid JSON. Use only words that appear in the text."""
 
-LISTING_USER = """Vehicle context: {year} {make} {model}
+LISTING_USER = """Buyer request: {part_name}
+Vehicle context: {year} {make} {model}
 
 Listings:
 {raw_text}
@@ -67,6 +68,7 @@ Return JSON:
   "listings": [
     {{
       "part_name": "",
+      "offered": "",
       "oem_number": "",
       "price": "",
       "condition": "",
@@ -79,8 +81,12 @@ Return JSON:
 }}
 
 Rules:
+- offered is the product this listing sells, using words from the text.
+- A kit, piston, bolt, tool, pad, seal, bracket, or piece of hardware is that product, not the larger assembly named beside it.
+- part_name describes that offered product. Do not rename a bolt, kit, piston, or tool as the requested assembly.
+- oem_number only when the text gives a manufacturer part number. A seller SKU is not an OEM number.
+- fitment_vehicles are cars the text claims. A named vehicle is a claim, not confirmation.
 - condition is New, Used, Rebuilt, or Unknown.
-- fitment_vehicles are cars the text says the part fits.
 - cross_fitment_hints are explicit also-fits or interchange statements.
 - Leave a field blank when the text does not state it.
 """
@@ -148,6 +154,7 @@ def read_listings(raw_text, vehicle, timeout=30):
             {
                 "role": "user",
                 "content": LISTING_USER.format(
+                    part_name=vehicle.get("part_name") or "",
                     year=vehicle.get("year") or "",
                     make=vehicle.get("make") or "",
                     model=vehicle.get("model") or "",

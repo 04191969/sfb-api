@@ -6,6 +6,8 @@ Token handling follows Nu World Lab: cache the application token until
 
 import base64
 import os
+import re
+import threading
 import time
 from urllib.parse import quote
 
@@ -16,6 +18,16 @@ SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
 ITEM_URL = "https://api.ebay.com/buy/browse/v1/item/"
 PARTS_CATEGORY = "6030"
 SCOPE = "https://api.ebay.com/oauth/api_scope"
+ITEM_CACHE_TTL = 6 * 60 * 60
+ITEM_CACHE_MAX = 400
+_item_cache = {}
+_item_cache_lock = threading.Lock()
+# Words that mark a seller sentence. A part number does not read as an instruction.
+_PROSE = re.compile(
+    r"\b(?:use|with|for|fits|includes|include|drive|ratchet|socket|handle|tool|only|when|your)\b",
+    re.IGNORECASE,
+)
+_PART_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9./-]{2,39}$")
 
 
 class EbayNotConfigured(RuntimeError):
@@ -79,13 +91,79 @@ def _money(node):
     return text, currency
 
 
-def _add_identifier(found, seen, kind, value):
+def clear_item_cache():
+    with _item_cache_lock:
+        _item_cache.clear()
+
+
+def _cached_item(item_id):
+    if not item_id:
+        return None
+    now = time.monotonic()
+    with _item_cache_lock:
+        row = _item_cache.get(item_id)
+        if not row:
+            return None
+        expires, payload = row
+        if expires <= now:
+            _item_cache.pop(item_id, None)
+            return None
+        return payload
+
+
+def _store_item(item_id, payload):
+    if not item_id or not isinstance(payload, dict) or not payload:
+        return
+    now = time.monotonic()
+    with _item_cache_lock:
+        _item_cache[item_id] = (now + ITEM_CACHE_TTL, payload)
+        if len(_item_cache) > ITEM_CACHE_MAX:
+            oldest = min(_item_cache, key=lambda key: _item_cache[key][0])
+            _item_cache.pop(oldest, None)
+
+
+def _usable_part_number(value):
+    """A compact code. An instruction or a sentence is not a part number."""
+    text = " ".join(str(value or "").split())
+    if not text or _PROSE.search(text):
+        return False
+    if any(ch.isspace() for ch in text) or not any(ch.isdigit() for ch in text):
+        return False
+    return _PART_TOKEN.fullmatch(text) is not None
+
+
+def _classify_aspect(kind, value, source):
+    """Label a field by what the seller or catalog claimed, then by the value's shape.
+
+    An explicit manufacturer part number is kept for comparison. Catalog data
+    can verify it. A seller claim stays unverified. A SKU is not that claim.
+    An instruction is kept and left out of matching.
+    """
+    if kind == "mpn":
+        if not _usable_part_number(value):
+            return "text", False, False
+        return "mpn", True, source == "catalog"
+    if kind in ("sku", "other"):
+        if not _usable_part_number(value):
+            return "text", False, False
+        return kind, False, False
+    return kind, False, False
+
+
+def _add_identifier(found, seen, kind, value, source, matches, verified=False):
     text = str(value or "").strip()
     key = (kind, text.casefold())
     if not text or key in seen:
         return
     seen.add(key)
-    found.append({"kind": kind, "value": text})
+    found.append({
+        "kind": kind,
+        "type": kind,
+        "source": source,
+        "value": text,
+        "matches": matches,
+        "verified": verified,
+    })
 
 
 def _country(location):
@@ -96,13 +174,25 @@ def _country(location):
 
 
 def _aspect_kind(name):
-    folded = " ".join(str(name or "").casefold().replace("_", " ").split())
+    folded = " ".join(str(name or "").casefold().replace("_", " ").replace("/", " ").split())
     if not folded:
         return ""
     if "interchange" in folded:
         return "interchange"
-    if "part number" in folded or folded in ("mpn", "oem", "oe number"):
+    if any(token in folded for token in ("sku", "custom label", "stock number", "inventory number")):
+        return "sku"
+    if "superseded" in folded or folded.startswith("other "):
+        return "other"
+    explicit = (
+        "manufacturer part number" in folded
+        or "oem part number" in folded
+        or "oe part number" in folded
+        or folded in {"mpn", "oem", "oe number", "oe oem part number"}
+    )
+    if explicit:
         return "mpn"
+    if "part number" in folded:
+        return "other"
     return ""
 
 
@@ -115,7 +205,7 @@ def _aspect_values(aspect):
     return []
 
 
-def _read_aspects(identifiers, seen, aspects):
+def _read_aspects(identifiers, seen, aspects, source):
     for aspect in aspects or []:
         if not isinstance(aspect, dict):
             continue
@@ -123,7 +213,11 @@ def _read_aspects(identifiers, seen, aspects):
         if not kind:
             continue
         for value in _aspect_values(aspect):
-            _add_identifier(identifiers, seen, kind, value)
+            if kind in ("mpn", "sku", "other"):
+                labeled, matches, verified = _classify_aspect(kind, value, source)
+            else:
+                labeled, matches, verified = kind, False, False
+            _add_identifier(identifiers, seen, labeled, value, source, matches, verified)
 
 
 def listing_facts(item):
@@ -142,14 +236,15 @@ def listing_facts(item):
     identifiers = []
     seen = set()
     for value in product.get("mpns") or []:
-        _add_identifier(identifiers, seen, "mpn", value)
+        labeled, matches, verified = _classify_aspect("mpn", value, "catalog")
+        _add_identifier(identifiers, seen, labeled, value, "catalog", matches, verified)
     for value in product.get("gtins") or []:
-        _add_identifier(identifiers, seen, "gtin", value)
-    _add_identifier(identifiers, seen, "epid", product.get("epid"))
+        _add_identifier(identifiers, seen, "gtin", value, "catalog", False)
+    _add_identifier(identifiers, seen, "epid", product.get("epid"), "catalog", False)
     # Search puts catalog aspects on product. The item call puts seller specifics
     # on localizedAspects, with one value field rather than a list.
-    _read_aspects(identifiers, seen, product.get("aspects"))
-    _read_aspects(identifiers, seen, item.get("localizedAspects"))
+    _read_aspects(identifiers, seen, product.get("aspects"), "catalog")
+    _read_aspects(identifiers, seen, item.get("localizedAspects"), "seller")
     return {
         "item_id": str(item.get("itemId") or "").strip(),
         "price_amount": price_amount,
@@ -237,21 +332,31 @@ class EbayBrowseClient:
             self._clear_token()
             raise
 
-    def get_item(self, item_id):
+    def peek_item(self, item_id):
+        """Item details already read in this worker. A miss is None, not a call."""
+        return _cached_item(str(item_id or "").strip())
+
+    def get_item(self, item_id, timeout=6):
         """One listing, including seller item specifics the search summary omits."""
         item_id = str(item_id or "").strip()
         if not item_id:
             return {}
+        cached = _cached_item(item_id)
+        if cached is not None:
+            return cached
         url = ITEM_URL + quote(item_id, safe="")
         try:
-            response = self._request(url, timeout=6)
+            response = self._request(url, timeout=timeout)
             if response.status_code == 401:
                 self._clear_token()
                 self._get_token()
-                response = self._request(url, timeout=6)
+                response = self._request(url, timeout=timeout)
             response.raise_for_status()
             payload = response.json()
-            return payload if isinstance(payload, dict) else {}
+            if not isinstance(payload, dict) or not payload:
+                return {}
+            _store_item(item_id, payload)
+            return payload
         except httpx.HTTPError:
             raise
 

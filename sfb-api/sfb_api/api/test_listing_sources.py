@@ -7,7 +7,8 @@ import django
 
 django.setup()
 
-from sfb_api.api.ebay_client import EbayNotConfigured, listing_facts
+from sfb_api.api.assessment import part_number_of
+from sfb_api.api.ebay_client import EbayBrowseClient, EbayNotConfigured, clear_item_cache, listing_facts
 from sfb_api.api.listing_find import find_listings
 from sfb_api.api.listing_sources import (
     CL_CITIES,
@@ -424,9 +425,17 @@ class FindTests(unittest.TestCase):
         })
         self.assertEqual(facts["price_amount"], "10.00")
         self.assertEqual(
-            [item for item in facts["identifiers"] if item["kind"] == "mpn"],
-            [{"kind": "mpn", "value": "99906705309"}],
+            facts["identifiers"],
+            [{
+                "kind": "mpn",
+                "type": "mpn",
+                "source": "seller",
+                "value": "99906705309",
+                "matches": True,
+                "verified": False,
+            }],
         )
+        self.assertEqual(part_number_of({"identifiers": facts["identifiers"]}), "99906705309")
 
         class Ebay:
             def __init__(self):
@@ -440,7 +449,7 @@ class FindTests(unittest.TestCase):
                     "price": {"value": "10.00", "currency": "USD"},
                 }]
 
-            def get_item(self, item_id):
+            def get_item(self, item_id, timeout=6):
                 self.detail_calls.append(item_id)
                 return {
                     "price": {"value": "99.00", "currency": "USD"},
@@ -462,8 +471,18 @@ class FindTests(unittest.TestCase):
         row = next(item for item in found["listings"] if item["source"] == "ebay")
         self.assertEqual(ebay.detail_calls, ["v1|1|0"])
         self.assertEqual(row["price_amount"], "10.00")
-        self.assertEqual(row["identifiers"], [{"kind": "mpn", "value": "99906705309"}])
-        self.assertEqual(found["reader"][0]["oem_number"], "99906705309")
+        self.assertEqual(row["identifiers"][0]["value"], "99906705309")
+        self.assertEqual(row["identifiers"][0]["source"], "seller")
+        self.assertEqual(row["identifiers"][0]["kind"], "mpn")
+        self.assertTrue(row["identifiers"][0]["matches"])
+        self.assertFalse(row["identifiers"][0]["verified"])
+        self.assertEqual(part_number_of(row), "99906705309")
+        self.assertEqual(found["reader"][0]["oem_number"], "Not listed")
+        self.assertEqual(row["assessment"]["part_number"], "99906705309")
+        self.assertEqual(row["assessment"]["market"]["status"], "conflict")
+        self.assertIn("caliper bolt", row["assessment"]["summary"])
+        self.assertIn("Seller manufacturer part number 99906705309, not verified.", row["assessment"]["summary"])
+        self.assertEqual(row["price_amount"], "10.00")
 
     def test_a_search_returns_collected_listings_when_time_runs_out(self):
         called = {"read": 0, "detail": 0, "brave": 0}
@@ -477,7 +496,7 @@ class FindTests(unittest.TestCase):
                     "price": {"value": "10.00", "currency": "USD"},
                 }]
 
-            def get_item(self, _item_id):
+            def get_item(self, _item_id, timeout=6):
                 called["detail"] += 1
                 return {}
 
@@ -511,3 +530,265 @@ class FindTests(unittest.TestCase):
         self.assertEqual(found["listings"][0]["price_amount"], "10.00")
         self.assertEqual(found["reader"][0]["part_name"], "Genuine Porsche caliper bolt")
         self.assertTrue(any(row["source"] == "deadline" for row in found["skipped"]))
+
+    def test_an_instruction_is_kept_and_excluded_from_matching(self):
+        instruction = 'Use with 3/8" drive ratchet/socket handle'
+        facts = listing_facts({
+            "itemId": "v1|2|0",
+            "price": {"value": "15.19", "currency": "USD"},
+            "localizedAspects": [
+                {"name": "Manufacturer Part Number", "value": instruction},
+            ],
+        })
+        self.assertEqual(facts["identifiers"], [{
+            "kind": "text",
+            "type": "text",
+            "source": "seller",
+            "value": instruction,
+            "matches": False,
+            "verified": False,
+        }])
+        self.assertEqual(part_number_of({"identifiers": facts["identifiers"]}), "")
+
+        class Ebay:
+            def search_parts(self, _query, limit=10):
+                return [{
+                    "title": "Caliper wind back tool",
+                    "itemWebUrl": "https://www.ebay.com/itm/2",
+                    "itemId": "v1|2|0",
+                    "price": {"value": "15.19", "currency": "USD"},
+                }]
+
+            def get_item(self, _item_id, timeout=6):
+                return {
+                    "price": {"value": "40.00", "currency": "USD"},
+                    "localizedAspects": [
+                        {"name": "Manufacturer Part Number", "value": instruction},
+                    ],
+                }
+
+        found = find_listings(
+            "brake caliper",
+            make="Porsche",
+            ebay=Ebay(),
+            old_cars=lambda _text: [],
+            get=lambda *_args, **_kwargs: type("Response", (), {"status_code": 200, "text": "", "headers": {}})(),
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+        )
+        row = next(item for item in found["listings"] if item["source"] == "ebay")
+        self.assertEqual(row["price_amount"], "15.19")
+        self.assertEqual(row["identifiers"][0]["value"], instruction)
+        self.assertFalse(row["identifiers"][0]["matches"])
+        self.assertEqual(found["reader"][0]["oem_number"], "Not listed")
+        self.assertIsNone(row["assessment"]["part_number"])
+        self.assertEqual(row["assessment"]["market"]["status"], "conflict")
+        self.assertIn("wind back tool", row["assessment"]["summary"])
+        self.assertIn("Seller entered " + instruction, row["assessment"]["summary"])
+        self.assertNotIn("no recent asking comparison", row["assessment"]["summary"])
+
+    def test_item_details_continue_while_time_remains_and_stop_before_the_deadline(self):
+        calls = []
+        clock = {"t": 0}
+
+        class Ebay:
+            def search_parts(self, _query, limit=10):
+                return [
+                    {
+                        "title": f"Caliper {index}",
+                        "itemWebUrl": f"https://www.ebay.com/itm/{index}",
+                        "itemId": f"v1|{index}|0",
+                        "price": {"value": "10.00", "currency": "USD"},
+                    }
+                    for index in range(1, 7)
+                ]
+
+            def get_item(self, item_id, timeout=6):
+                calls.append((item_id, timeout))
+                clock["t"] += 3
+                return {
+                    "localizedAspects": [
+                        {"name": "Manufacturer Part Number", "value": "15626K"},
+                    ],
+                }
+
+        wide = find_listings(
+            "brake caliper",
+            make="Porsche",
+            ebay=Ebay(),
+            old_cars=lambda _text: [],
+            get=lambda *_args, **_kwargs: type("Response", (), {"status_code": 200, "text": "", "headers": {}})(),
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+            now=lambda: clock["t"],
+            budget_seconds=55,
+        )
+        self.assertEqual(len(calls), 6)
+        ebay_rows = [item for item in wide["listings"] if item["source"] == "ebay"]
+        self.assertTrue(all(item["price_amount"] == "10.00" for item in ebay_rows))
+        self.assertTrue(all(part_number_of(item) == "15626K" for item in ebay_rows))
+        self.assertTrue(all(item["identifiers"][0]["verified"] is False for item in ebay_rows))
+        self.assertTrue(all(item["identifiers"][0]["value"] == "15626K" for item in ebay_rows))
+
+        calls.clear()
+        clock["t"] = 0
+
+        class SlowEbay(Ebay):
+            def get_item(self, item_id, timeout=6):
+                calls.append(item_id)
+                clock["t"] += 20
+                return {}
+
+        tight = find_listings(
+            "brake caliper",
+            make="Porsche",
+            ebay=SlowEbay(),
+            old_cars=lambda _text: [],
+            get=lambda *_args, **_kwargs: type("Response", (), {"status_code": 200, "text": "", "headers": {}})(),
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+            now=lambda: clock["t"],
+            budget_seconds=55,
+        )
+        self.assertEqual(calls, ["v1|1|0", "v1|2|0"])
+        self.assertEqual(len(tight["listings"]), 6)
+        self.assertEqual(tight["reader"][0]["part_name"], "Caliper 1")
+        self.assertTrue(any(row["source"] == "deadline" for row in tight["skipped"]))
+
+    def test_cached_item_details_are_used_when_there_is_no_time_to_call(self):
+        calls = []
+
+        class Ebay:
+            def search_parts(self, _query, limit=10):
+                return [
+                    {
+                        "title": "Cached caliper bolt",
+                        "itemWebUrl": "https://www.ebay.com/itm/cached",
+                        "itemId": "v1|cached|0",
+                        "price": {"value": "15.08", "currency": "USD"},
+                    },
+                    {
+                        "title": "Uncached caliper bolt",
+                        "itemWebUrl": "https://www.ebay.com/itm/new",
+                        "itemId": "v1|new|0",
+                        "price": {"value": "5.96", "currency": "USD"},
+                    },
+                ]
+
+            def peek_item(self, item_id):
+                if item_id == "v1|cached|0":
+                    return {
+                        "localizedAspects": [
+                            {"name": "Manufacturer Part Number", "value": "99906705309"},
+                        ],
+                    }
+                return None
+
+            def get_item(self, item_id, timeout=6):
+                calls.append(item_id)
+                return {}
+
+        found = find_listings(
+            "brake caliper",
+            make="Porsche",
+            ebay=Ebay(),
+            old_cars=lambda _text: [],
+            get=lambda *_args, **_kwargs: type("Response", (), {"status_code": 200, "text": "", "headers": {}})(),
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+            now=lambda: 0,
+            budget_seconds=0,
+        )
+        self.assertEqual(calls, [])
+        cached = next(item for item in found["listings"] if item["item_id"] == "v1|cached|0")
+        fresh = next(item for item in found["listings"] if item["item_id"] == "v1|new|0")
+        self.assertEqual(cached["price_amount"], "15.08")
+        self.assertEqual(cached["identifiers"][0]["value"], "99906705309")
+        self.assertEqual(cached["identifiers"][0]["type"], "mpn")
+        self.assertTrue(cached["identifiers"][0]["matches"])
+        self.assertFalse(cached["identifiers"][0]["verified"])
+        self.assertEqual(fresh.get("identifiers") or [], [])
+        self.assertEqual(part_number_of(cached), "99906705309")
+        self.assertEqual(cached["request_match"]["status"], "conflict")
+
+    def test_a_second_item_read_uses_the_cache(self):
+        clear_item_cache()
+        client = EbayBrowseClient.__new__(EbayBrowseClient)
+        client._token = "token"
+        client._deadline = 10**12
+        calls = []
+
+        def _request(_url, params=None, timeout=15):
+            calls.append(timeout)
+
+            class Response:
+                status_code = 200
+
+                def raise_for_status(self):
+                    return None
+
+                def json(self):
+                    return {
+                        "itemId": "v1|cached|0",
+                        "localizedAspects": [
+                            {"name": "Manufacturer Part Number", "value": "8076"},
+                        ],
+                    }
+
+            return Response()
+
+        client._request = _request
+        first = client.get_item("v1|cached|0", timeout=6)
+        second = client.get_item("v1|cached|0", timeout=6)
+        self.assertEqual(calls, [6])
+        self.assertEqual(first, second)
+        self.assertEqual(client.peek_item("v1|cached|0"), first)
+        clear_item_cache()
+
+    def test_a_seller_sku_stays_out_of_the_manufacturer_number(self):
+        facts = listing_facts({
+            "itemId": "v1|3|0",
+            "localizedAspects": [
+                {"name": "SKU", "value": "15626K"},
+                {"name": "Manufacturer Part Number", "value": "99906705309"},
+            ],
+        })
+        kinds = {item["kind"]: item for item in facts["identifiers"]}
+        self.assertEqual(kinds["sku"]["value"], "15626K")
+        self.assertFalse(kinds["sku"]["matches"])
+        self.assertFalse(kinds["sku"]["verified"])
+        self.assertEqual(kinds["mpn"]["source"], "seller")
+        self.assertFalse(kinds["mpn"]["verified"])
+        self.assertEqual(part_number_of({"identifiers": facts["identifiers"]}), "99906705309")
+
+    def test_the_reader_product_can_reject_a_vague_title(self):
+        class Ebay:
+            def search_parts(self, _query, limit=10):
+                return [{
+                    "title": "Porsche item",
+                    "itemWebUrl": "https://www.ebay.com/itm/4",
+                    "itemId": "v1|4|0",
+                    "price": {"value": "20.00", "currency": "USD"},
+                    "product": {"mpns": ["ABC123"]},
+                }]
+
+        found = find_listings(
+            "brake caliper",
+            make="Porsche",
+            model="911",
+            year="2015",
+            ebay=Ebay(),
+            old_cars=lambda _text: [],
+            get=lambda *_args, **_kwargs: type("Response", (), {"status_code": 200, "text": "", "headers": {}})(),
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: [{
+                "part_name": "brake caliper bolt",
+                "offered": "brake caliper bolt",
+                "link": "https://www.ebay.com/itm/4",
+            }],
+            confirm_fitment=lambda _number, _vehicle: True,
+        )
+        row = found["listings"][0]
+        self.assertEqual(row["request_match"]["status"], "conflict")
+        self.assertIn("caliper bolt", row["assessment"]["summary"])
+        self.assertNotEqual(row["assessment"]["market"]["status"], "limited")

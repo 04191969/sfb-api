@@ -8,7 +8,7 @@ A refused host is skipped. The next source is still tried.
 import os
 import time
 
-from .assessment import part_number_of
+from .assessment import part_number_of, verified_part_number
 from .catalog_fetch import CatalogBlocked, CatalogMissing, fetch_catalog
 from .ebay_client import EbayBrowseClient, EbayNotConfigured, build_query, listing_facts
 from .listing_sources import (
@@ -46,7 +46,8 @@ def _named(items, source_id, part_name, require_part=True):
 # Gunicorn stops the worker at 90 seconds. A catalog timeout is tried once,
 # so leave room for that retry and for the response itself.
 SEARCH_BUDGET = 55
-DETAIL_LIMIT = 4
+# A new item call has to leave the other sources and the response inside the worker limit.
+DETAIL_FLOOR = 28
 
 
 def _fetch_rss(url, get, pause, limit=8, timeout=12):
@@ -102,20 +103,27 @@ def _merge_facts(listing, facts):
 
 
 def _fill_part_numbers(ebay, listings, time_left):
-    """Search summaries often omit the seller's part number. The item call has it."""
+    """Read item specifics while time remains. Cached details do not wait on the clock.
+
+    Seller text is merged as the seller wrote it. A price already in hand stays.
+    """
     if not hasattr(ebay, "get_item"):
         return
-    fetched = 0
     for listing in listings:
         if listing.get("source") != "ebay" or part_number_of(listing):
             continue
-        if fetched >= DETAIL_LIMIT or time_left() < 28:
-            break
-        fetched += 1
-        try:
-            detail = ebay.get_item(listing.get("item_id"))
-        except Exception:
-            continue
+        item_id = listing.get("item_id")
+        detail = ebay.peek_item(item_id) if hasattr(ebay, "peek_item") else None
+        if not isinstance(detail, dict):
+            if time_left() < DETAIL_FLOOR:
+                continue
+            try:
+                detail = ebay.get_item(
+                    item_id,
+                    timeout=min(6, max(2, int(time_left()) - 22)),
+                )
+            except Exception:
+                continue
         if isinstance(detail, dict):
             _merge_facts(listing, listing_facts(detail))
 
@@ -124,7 +132,7 @@ def _source_reader(listings):
     """Rows the page can show when the reader does not run or does not answer."""
     rows = []
     for item in listings:
-        number = part_number_of(item)
+        number = verified_part_number(item)
         price = _money_label(item.get("price_amount"), item.get("price_currency"))
         rows.append({
             "part_name": item.get("title") or "",
@@ -138,7 +146,7 @@ def _source_reader(listings):
     return rows
 
 
-def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None, now=None, budget_seconds=SEARCH_BUDGET):
+def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None, now=None, budget_seconds=SEARCH_BUDGET, confirm_fitment=None):
     """Return listings, sources that were skipped, and the raw text a reader can use."""
     part_name = str(part_name or "").strip()
     text = search_text(part_name, make, model, year)
@@ -225,7 +233,8 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     }
     from .evidence_store import add_assessment
 
-    vehicle = {"year": year, "make": make, "model": model}
+    vehicle = {"year": year, "make": make, "model": model, "part_name": part_name}
+    found["request"] = vehicle
     if time_left() < 22:
         _mark_deadline(skipped)
         found["reader"] = keep_source_facts(found["listings"], _source_reader(found["listings"]))
@@ -236,7 +245,7 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
             read=read,
             read_timeout=min(15, max(8, int(time_left()) - 12)),
         )
-    return add_assessment(found, evidence=evidence, today=today)
+    return add_assessment(found, evidence=evidence, today=today, confirm_fitment=confirm_fitment)
 
 
 def _money_label(amount, currency):
@@ -310,12 +319,14 @@ def keep_source_facts(listings, reader):
         identifiers = source.get("identifiers") or []
         if identifiers:
             row["identifiers"] = identifiers
-            part_number = next(
-                (item["value"] for item in identifiers if item.get("kind") in ("mpn", "oem")),
-                "",
-            )
-            if part_number:
-                row["oem_number"] = part_number
+            verified = verified_part_number({"identifiers": identifiers})
+            if verified:
+                row["oem_number"] = verified
+            else:
+                claimed = part_number_of({"identifiers": identifiers})
+                current = str(row.get("oem_number") or "").strip()
+                if claimed and current.casefold() == claimed.casefold():
+                    row["oem_number"] = "Not listed"
     return reader
 
 

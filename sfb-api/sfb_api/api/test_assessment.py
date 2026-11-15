@@ -8,9 +8,10 @@ import django
 
 django.setup()
 
-from sfb_api.api.assessment import assess_listing, same_part
+from sfb_api.api.assessment import assess_listing, part_number_of, same_part
 from sfb_api.api.evidence_store import MemoryEvidence, evidence_row
 from sfb_api.api.listing_find import find_listings
+from sfb_api.api.request_match import classify_listing
 
 TODAY = date(2026, 11, 15)
 
@@ -128,12 +129,12 @@ class AssessmentTests(unittest.TestCase):
 
     def test_a_search_assesses_against_saved_evidence(self):
         store = MemoryEvidence()
-        store.upsert([asking("earlier", "ABC123", "42.00")])
+        store.upsert([asking("earlier", "ABC123", "42.00", title="Front brake caliper")])
 
         class Ebay:
             def search_parts(self, _query, limit=10):
                 return [{
-                    "title": "Caliper bolt",
+                    "title": "Front brake caliper",
                     "itemWebUrl": "https://www.ebay.com/itm/9",
                     "itemId": "v1|9|0",
                     "price": {"value": "50.00", "currency": "USD"},
@@ -158,7 +159,7 @@ class AssessmentTests(unittest.TestCase):
             get=get_status,
             pause=lambda _seconds: None,
             read=lambda _raw, _vehicle: [{
-                "part_name": "Caliper bolt",
+                "part_name": "Front brake caliper",
                 "price": "Not listed",
                 "oem_number": "",
                 "link": "https://www.ebay.com/itm/9",
@@ -166,6 +167,7 @@ class AssessmentTests(unittest.TestCase):
             }],
             evidence=store,
             today=TODAY,
+            confirm_fitment=lambda number, _vehicle: number == "ABC123",
         )
         assessment = found["reader"][0]["assessment"]
         self.assertEqual(assessment["market"]["status"], "limited")
@@ -173,3 +175,164 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(found["reader"][0]["price"], "50.00 USD")
         self.assertEqual(len(store.rows), 2)
         self.assertTrue(found["evidence_saved"])
+
+    def test_related_products_are_not_the_requested_caliper(self):
+        vehicle = {"year": "2015", "make": "Porsche", "model": "911"}
+        samples = {
+            "Disc Brake Caliper Repair Kit": "repair kit",
+            "Disc Brake Caliper Piston": "caliper piston",
+            "GENUINE PORSCHE Brake Caliper Bolt": "caliper bolt",
+            "Car Rear Disc Brake Piston Caliper Wind Back Tool": "back tool",
+        }
+        for title, offered in samples.items():
+            match = classify_listing("brake caliper", {"title": title}, vehicle)
+            self.assertEqual(match["status"], "conflict", title)
+            self.assertIn(offered, match["offered"])
+        held = classify_listing("brake caliper", {"title": "Front Left Brake Caliper"}, vehicle)
+        self.assertEqual(held["status"], "uncertain")
+        self.assertIn("Held for clarification", held["reason"])
+        self.assertIn("2015 Porsche 911", held["reason"])
+        for title in ("", "Porsche item", "Brake Caliper Kit", "Complete Caliper Kit"):
+            match = classify_listing("brake caliper", {"title": title}, vehicle)
+            self.assertEqual(match["status"], "uncertain", title)
+            self.assertNotIn("not the requested", match["reason"])
+        kit = classify_listing("brake caliper", {"title": "Brake Caliper Kit"}, vehicle)
+        self.assertIn("complete brake caliper or a kit", kit["reason"])
+        hardware = classify_listing("brake caliper", {"title": "Brake caliper hardware kit"}, vehicle)
+        self.assertEqual(hardware["status"], "conflict")
+
+    def test_supported_interchange_establishes_fitment_without_catalog(self):
+        from sfb_api.api.evidence_store import add_assessment
+
+        claim = {
+            "kind": "mpn", "type": "mpn", "source": "seller",
+            "value": "BBB", "matches": True, "verified": False,
+        }
+        record = {
+            "part_number": "AAA",
+            "equivalent_part_number": "BBB",
+            "configuration": "front",
+            "side": "left",
+            "assembly": "caliper",
+        }
+        qualifiers = {"configuration": "front", "side": "left", "assembly": "caliper"}
+
+        def listing(item_id, title, price, **extra):
+            row = {
+                "source": "ebay",
+                "item_id": item_id,
+                "url": f"https://www.ebay.com/itm/{item_id}",
+                "title": title,
+                "price_amount": price,
+                "price_currency": "USD",
+                "identifiers": [dict(claim)],
+            }
+            row.update(extra)
+            return row
+
+        request = {"part_name": "brake caliper", "year": "2015", "make": "Porsche", "model": "911"}
+        found = {
+            "request": request,
+            "listings": [
+                listing("1", "Front left brake caliper", "80.00", **qualifiers),
+                listing("2", "Front left brake caliper", "100.00", **qualifiers),
+            ],
+            "reader": [],
+        }
+        add_assessment(
+            found,
+            evidence=MemoryEvidence(interchange=[record]),
+            confirm_fitment=lambda *_args: False,
+            today=TODAY,
+        )
+        first = found["listings"][0]
+        self.assertEqual(first["request_match"]["status"], "qualifying")
+        self.assertEqual(first["request_match"]["fitment"], "interchange")
+        self.assertFalse(first["identifiers"][0]["verified"])
+        self.assertEqual(first["assessment"]["market"]["status"], "limited")
+        self.assertEqual(first["assessment"]["market"]["reference_price"], "100.00")
+        self.assertIn("not verified", first["assessment"]["summary"])
+
+        bare = {
+            "request": request,
+            "listings": [listing("3", "Front left brake caliper", "80.00")],
+            "reader": [],
+        }
+        add_assessment(
+            bare,
+            evidence=MemoryEvidence(interchange=[record]),
+            confirm_fitment=lambda *_args: False,
+            today=TODAY,
+        )
+        self.assertEqual(bare["listings"][0]["request_match"]["status"], "uncertain")
+        self.assertIn("fitment", bare["listings"][0]["request_match"]["reason"])
+
+        bolt = {
+            "request": request,
+            "listings": [listing("4", "Brake caliper bolt", "15.00", **qualifiers)],
+            "reader": [],
+        }
+        add_assessment(
+            bolt,
+            evidence=MemoryEvidence(interchange=[record]),
+            confirm_fitment=lambda *_args: False,
+            today=TODAY,
+        )
+        self.assertEqual(bolt["listings"][0]["request_match"]["status"], "conflict")
+
+    def test_a_bolt_with_the_same_number_does_not_set_the_caliper_price(self):
+        caliper = {
+            "source": "ebay",
+            "item_id": "caliper",
+            "title": "Front brake caliper",
+            "price_amount": "80.00",
+            "price_currency": "USD",
+            "identifiers": [{
+                "kind": "mpn", "type": "mpn", "source": "seller",
+                "value": "ABC123", "matches": True, "verified": False,
+            }],
+            "request_match": {"status": "qualifying", "reason": "", "offered": "brake caliper", "fitment": "established"},
+        }
+        bolt = asking("bolt", "ABC123", "15.00", title="Brake caliper bolt")
+        result = assess_listing(caliper, [caliper, bolt], today=TODAY, qualifying_keys={("ebay", "caliper")})
+        self.assertEqual(result["market"]["status"], "needs_data")
+        self.assertIsNone(result["market"]["reference_price"])
+
+        bolt["identifiers"] = [dict(item) for item in caliper["identifiers"]]
+        bolt["request_match"] = classify_listing("brake caliper", bolt)
+        rejected = assess_listing(bolt, [caliper, bolt], today=TODAY, qualifying_keys={("ebay", "caliper")})
+        self.assertEqual(rejected["market"]["status"], "conflict")
+        self.assertEqual(rejected["part_number"], "ABC123")
+        self.assertIn("not verified", rejected["summary"])
+
+    def test_unconfirmed_fitment_is_held_and_confirmed_offers_are_compared(self):
+        claim = [{
+            "kind": "mpn", "type": "mpn", "source": "seller",
+            "value": "ABC123", "matches": True, "verified": False,
+        }]
+        first = {
+            "source": "ebay", "item_id": "one", "title": "Front brake caliper",
+            "price_amount": "80.00", "price_currency": "USD", "identifiers": claim,
+        }
+        second = {
+            "source": "ebay", "item_id": "two", "title": "Front brake caliper",
+            "price_amount": "100.00", "price_currency": "USD",
+            "identifiers": [dict(item) for item in claim],
+        }
+        vehicle = {"year": "2015", "make": "Porsche", "model": "911", "part_name": "brake caliper"}
+        for item in (first, second):
+            item["request_match"] = classify_listing("brake caliper", item, vehicle, fitment_established=False)
+        held = assess_listing(first, [first, second], today=TODAY, qualifying_keys=set())
+        self.assertEqual(held["market"]["status"], "uncertain")
+        self.assertIn("Held for clarification", held["summary"])
+        self.assertEqual(part_number_of(first), "ABC123")
+
+        keys = {("ebay", "one"), ("ebay", "two")}
+        compared_subject = dict(first)
+        compared_subject["request_match"] = classify_listing("brake caliper", first, vehicle, True)
+        compared = assess_listing(compared_subject, [
+            asking("one", "ABC123", "80.00"),
+            asking("two", "ABC123", "100.00"),
+        ], today=TODAY, qualifying_keys=keys)
+        self.assertEqual(compared["market"]["status"], "limited")
+        self.assertEqual(compared["market"]["reference_price"], "100.00")

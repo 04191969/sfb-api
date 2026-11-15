@@ -177,12 +177,130 @@ def default_evidence():
     return SupabaseEvidence()
 
 
-def add_assessment(found, evidence=None, today=None):
-    """Save this search's observations, then assess every listing against the store."""
-    from .assessment import assess_listing
+def _copy_reader_offers(found):
+    """The reader's product name is part of what the listing offers."""
+    reader = found.get("reader")
+    if not isinstance(reader, list):
+        return
+    by_url = {item.get("url"): item for item in found.get("listings") or [] if item.get("url")}
+    for row in reader:
+        if not isinstance(row, dict):
+            continue
+        source = by_url.get(row.get("link") or row.get("url") or "")
+        name = str(row.get("offered") or row.get("part_name") or "").strip()
+        if source is not None and name:
+            source["offered_name"] = name
 
+
+def _mark_verified(listing, number):
+    for item in listing.get("identifiers") or []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("value") or "").strip().casefold() != number.casefold():
+            continue
+        if (item.get("kind") or item.get("type")) in ("mpn", "oem"):
+            item["verified"] = True
+
+
+def catalog_confirms(part_number, vehicle):
+    """True when catalog manufacturer data fits this number to the requested vehicle."""
+    from django.conf import settings
+
+    number = str(part_number or "").strip()
+    vehicle = vehicle or {}
+    year = str(vehicle.get("year") or "").strip()
+    make = str(vehicle.get("make") or "").strip()
+    model = str(vehicle.get("model") or "").strip()
+    if not number or not year.isdigit() or not make or not model:
+        return False
+    if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
+        return False
+    try:
+        from .catalog import fitment_for_parts, part_by_oem, search_vehicles
+        from .request_match import _conflict_word, _head, tokens
+
+        part = part_by_oem(number)
+        if not part:
+            return False
+        catalog_name = part.get("part_name") or ""
+        requested = vehicle.get("part_name") or ""
+        if _conflict_word(requested, catalog_name):
+            return False
+        head = _head(requested)
+        if head and head not in set(tokens(catalog_name)):
+            return False
+        vehicles = search_vehicles(make, model, int(year))
+        vehicle_ids = {row.get("id") for row in vehicles}
+        if not vehicle_ids:
+            return False
+        rows = fitment_for_parts([part["id"]])
+        return any(row.get("vehicle_id") in vehicle_ids for row in rows)
+    except Exception:
+        return False
+
+
+def _classify_rows(listings, request, confirm, answers=None, interchange=None):
+    from .assessment import interchange_establishes, listing_key, part_number_of
+    from .request_match import classify_listing
+
+    request = request or {}
+    requested = request.get("part_name") or ""
+    answers = answers if answers is not None else {}
+    interchange = interchange or []
+
+    def catalog_established(row):
+        if row.get("fitment_established") is True:
+            return True
+        number = part_number_of(row)
+        if not number or confirm is None:
+            return False
+        key = number.casefold()
+        if key not in answers:
+            try:
+                answers[key] = bool(confirm(number, request))
+            except Exception:
+                answers[key] = False
+        return answers[key]
+
+    keys = set()
+    for item in listings:
+        match = classify_listing(requested, item, request, fitment_established=False)
+        if match.get("status") == "uncertain" and match.get("offered") and not match.get("ambiguous"):
+            fitment_by = ""
+            if interchange_establishes(item, interchange):
+                fitment_by = "interchange"
+            elif catalog_established(item):
+                fitment_by = "catalog"
+                _mark_verified(item, part_number_of(item))
+            if fitment_by:
+                match = classify_listing(
+                    requested, item, request, fitment_established=True, fitment_by=fitment_by,
+                )
+        item["request_match"] = match
+        if match.get("status") == "qualifying":
+            keys.add(listing_key(item))
+    return keys
+
+
+def add_assessment(found, evidence=None, today=None, confirm_fitment=None):
+    """Save this search's observations, then assess every listing against the store."""
+    from .assessment import assess_listing, listing_key
+
+    _copy_reader_offers(found)
+    if confirm_fitment is None:
+        confirm_fitment = catalog_confirms
+    request = found.get("request") or {}
     store = evidence if evidence is not None else default_evidence()
     listings = found.get("listings") or []
+    from .assessment import part_number_of
+
+    numbers = [part_number_of(item) for item in listings if part_number_of(item)]
+    try:
+        interchange = store.interchange_for(numbers)
+    except Exception:
+        interchange = []
+    fitment_answers = {}
+    qualifying = _classify_rows(listings, request, confirm_fitment, fitment_answers, interchange)
     rows = [evidence_row(item) for item in listings]
     rows = [row for row in rows if row]
     saved = True
@@ -206,13 +324,23 @@ def add_assessment(found, evidence=None, today=None):
         stored = fallback.for_parts(numbers)
         interchange = []
     found["evidence_saved"] = saved
+    qualifying.update(_classify_rows(
+        [row for row in stored if listing_key(row) not in qualifying],
+        request,
+        confirm_fitment,
+        fitment_answers,
+        interchange,
+    ))
     for item in listings:
         record = evidence_row(item) or item
         record["identifiers"] = item.get("identifiers")
         record["configuration"] = item.get("configuration")
         record["side"] = item.get("side")
         record["assembly"] = item.get("assembly")
-        item["assessment"] = assess_listing(record, stored, interchange, today=today)
+        record["request_match"] = item.get("request_match")
+        item["assessment"] = assess_listing(
+            record, stored, interchange, today=today, qualifying_keys=qualifying,
+        )
     reader = found.get("reader")
     if isinstance(reader, list):
         by_url = {item.get("url"): item for item in listings if item.get("url")}

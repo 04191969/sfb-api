@@ -244,6 +244,27 @@ def insert_vehicle(vehicle):
     return result.data[0] if result.data else row
 
 
+def part_by_oem(oem):
+    """The catalog part with this manufacturer number, or None."""
+    text = str(oem or "").strip()
+    if not text:
+        return None
+    client = get_supabase()
+    rows = (
+        client.table("parts")
+        .select("id,part_name,category,oem_part_number,brand")
+        .ilike("oem_part_number", _escape_exact(text))
+        .limit(5)
+        .execute()
+        .data
+        or []
+    )
+    for row in rows:
+        if (row.get("oem_part_number") or "").casefold() == text.casefold():
+            return row
+    return None
+
+
 def find_part(part):
     client = get_supabase()
     columns = "id,part_name,category,oem_part_number,brand"

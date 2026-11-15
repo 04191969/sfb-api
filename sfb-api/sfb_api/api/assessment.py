@@ -14,15 +14,55 @@ SOLD_DAYS = 180
 DOMESTIC = {"us", "usa", "united states"}
 
 
+_IGNORED_NUMBERS = {"not listed", "unknown", "n/a", "none"}
+
+
+def _claim_text(item):
+    """An explicit manufacturer part number. A SKU, instruction, or interchange id is not one."""
+    if not isinstance(item, dict) or item.get("matches") is False:
+        return ""
+    kind = item.get("kind") or item.get("type")
+    if kind not in ("mpn", "oem"):
+        return ""
+    text = str(item.get("value") or "").strip()
+    if not text or text.casefold() in _IGNORED_NUMBERS:
+        return ""
+    return text
+
+
 def part_number_of(record):
-    """Manufacturer part number only. An interchange id is not this part."""
+    """Manufacturer part number used for same-part comparison.
+
+    A catalog number is preferred. A seller's explicit manufacturer-part-number
+    claim is kept and can be compared; it is not marked verified by itself.
+    A seller SKU is not this number.
+    """
+    verified = []
+    claims = []
     for item in record.get("identifiers") or []:
-        if item.get("kind") in ("mpn", "oem") and str(item.get("value") or "").strip():
-            return str(item["value"]).strip()
+        text = _claim_text(item)
+        if not text:
+            continue
+        if item.get("verified") is True:
+            verified.append(text)
+        else:
+            claims.append(text)
+    if verified:
+        return verified[0]
+    if claims:
+        return claims[0]
     number = record.get("part_number")
     text = str(number or "").strip()
-    if text and text.casefold() not in {"not listed", "unknown", "n/a", "none"}:
+    if text and text.casefold() not in _IGNORED_NUMBERS:
         return text
+    return ""
+
+
+def verified_part_number(record):
+    """Catalog or manufacturer-confirmed number. A seller claim alone is not verified."""
+    for item in record.get("identifiers") or []:
+        if item.get("verified") is True and _claim_text(item):
+            return _claim_text(item)
     return ""
 
 
@@ -110,6 +150,31 @@ def interchange_applies(subject, other_number, records):
     return False
 
 
+def interchange_establishes(listing, records):
+    """Supported interchange is a fitment path when the three qualifiers match.
+
+    Direct catalog coverage is a separate path. A part number with no
+    configuration, side, and assembly does not take this one.
+    """
+    number = part_number_of(listing)
+    if not number:
+        return False
+    if not all(_text(listing.get(field)) for field in ("configuration", "side", "assembly")):
+        return False
+    for record in records or []:
+        left = _text(record.get("part_number"))
+        right = _text(record.get("equivalent_part_number"))
+        if number.casefold() == left.casefold():
+            other = right
+        elif number.casefold() == right.casefold():
+            other = left
+        else:
+            continue
+        if interchange_applies(listing, other, [record]):
+            return True
+    return False
+
+
 def same_part(subject, evidence, interchange):
     subject_number = part_number_of(subject)
     evidence_number = part_number_of(evidence)
@@ -133,7 +198,7 @@ def _recent(status, row, today):
     return age
 
 
-def _eligible(subject, evidence, interchange, today, status, basis):
+def _eligible(subject, evidence, interchange, today, status, basis, qualifying_keys=None):
     """Rows that can sit in one comparison set. The subject itself is excluded."""
     chosen = []
     subject_key = listing_key(subject)
@@ -144,6 +209,8 @@ def _eligible(subject, evidence, interchange, today, status, basis):
         if listing_key(row) == subject_key and all(subject_key):
             continue
         if not same_part(subject, row, interchange):
+            continue
+        if qualifying_keys is not None and listing_key(row) not in qualifying_keys:
             continue
         price = money(row.get("price_amount"))
         if price is None or not _same_currency(subject_currency, row.get("price_currency")):
@@ -288,8 +355,34 @@ def listing_costs(listing):
     }
 
 
-def _summary(market, costs):
-    if not part_number_of({"part_number": market.get("part_number")}):
+def _identifier_note(listing):
+    notes = []
+    seen = set()
+    for item in listing.get("identifiers") or []:
+        if not isinstance(item, dict):
+            continue
+        value = str(item.get("value") or "").strip()
+        key = value.casefold()
+        if not value or key in seen:
+            continue
+        seen.add(key)
+        kind = item.get("kind") or item.get("type")
+        if kind in ("mpn", "oem") and item.get("verified") is True:
+            continue
+        if kind in ("mpn", "oem") and item.get("matches") is not False:
+            notes.append(f"Seller manufacturer part number {value}, not verified.")
+        elif kind == "sku":
+            notes.append(f"Seller SKU {value} is not a manufacturer part number.")
+        elif kind == "text":
+            notes.append(f"Seller entered {value}.")
+    return " ".join(notes)
+
+
+def _summary(market, costs, note=""):
+    status = market.get("status")
+    if status in ("conflict", "uncertain"):
+        identity = market.get("limitation") or ""
+    elif not part_number_of({"part_number": market.get("part_number")}):
         identity = "Needs data: this listing has no manufacturer part number, so no comparison was made."
     elif market["status"] == "needs_data":
         identity = "Needs data: no recent asking comparison for this part on the same price basis."
@@ -313,32 +406,63 @@ def _summary(market, costs):
         parts.append(f"shipping {shipping} {costs.get('shipping_currency') or ''}".strip())
     if costs.get("missing"):
         parts.append("Needs data: " + ", ".join(costs["missing"]))
+    if note:
+        identity = (identity + " " + note).strip()
     return identity + (" " + ". ".join(parts) + "." if parts else "")
 
 
-def assess_listing(listing, evidence, interchange=None, today=None):
-    """Assess one listing. Asking evidence supplies the consumer reference."""
+def _blocked_set(match, set_name, basis, currency):
+    row = _set_result([], set_name, basis)
+    row["status"] = match.get("status")
+    row["limitation"] = match.get("reason") or ""
+    row["currency"] = currency
+    return row
+
+
+def assess_listing(listing, evidence, interchange=None, today=None, qualifying_keys=None):
+    """Assess one listing. Price is compared only for a qualifying same-part offer."""
     today = today or date.today()
     number = part_number_of(listing)
     subject = dict(listing)
     subject["part_number"] = number
     costs = listing_costs(listing)
+    match = listing.get("request_match") if isinstance(listing.get("request_match"), dict) else None
+    note = _identifier_note(listing)
+    if match and match.get("status") in ("conflict", "uncertain"):
+        market = _blocked_set(match, "asking", "item", listing.get("price_currency"))
+        market["part_number"] = number or None
+        delivered = _blocked_set(match, "asking", "delivered", listing.get("price_currency"))
+        sold = _blocked_set(match, "sold", "item", listing.get("price_currency"))
+        return {
+            "part_number": number or None,
+            "market": market,
+            "delivered": delivered,
+            "sold": sold,
+            "costs": costs,
+            "summary": _summary(market, costs, note),
+            "identifiers": list(listing.get("identifiers") or []),
+            "request": match,
+        }
     if not number:
         market = _set_result([], "asking", "item")
         market["limitation"] = "No manufacturer part number, so listings were not compared."
     else:
-        market = _set_result(_eligible(subject, evidence, interchange, today, "asking", "item"), "asking", "item")
+        market = _set_result(
+            _eligible(subject, evidence, interchange, today, "asking", "item", qualifying_keys),
+            "asking",
+            "item",
+        )
     market["currency"] = listing.get("price_currency")
     market["part_number"] = number or None
     delivered = _set_result(
-        _eligible(subject, evidence, interchange, today, "asking", "delivered") if number else [],
+        _eligible(subject, evidence, interchange, today, "asking", "delivered", qualifying_keys) if number else [],
         "asking",
         "delivered",
     )
     if delivered["status"] == "needs_data":
         delivered["missing"] = [name for name in ("shipping", "tax") if name in costs["missing"]]
     sold = _set_result(
-        _eligible(subject, evidence, interchange, today, "sold", "item") if number else [],
+        _eligible(subject, evidence, interchange, today, "sold", "item", qualifying_keys) if number else [],
         "sold",
         "item",
     )
@@ -349,6 +473,8 @@ def assess_listing(listing, evidence, interchange=None, today=None):
         "delivered": delivered,
         "sold": sold,
         "costs": costs,
-        "summary": _summary(market, costs),
+        "summary": _summary(market, costs, note),
+        "identifiers": list(listing.get("identifiers") or []),
+        "request": match,
     }
     return result
