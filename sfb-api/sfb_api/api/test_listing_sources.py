@@ -80,13 +80,15 @@ class SourceListTests(unittest.TestCase):
         self.assertIn("carcode=1190933", rockauto_rss_url("1190933"))
         porsche_sites = get_forum_sites("Porsche")
         self.assertEqual(porsche_sites[0], "rennlist.com")
-        self.assertIn("hemmings.com", porsche_sites)
         self.assertNotIn("bimmerforums.com", porsche_sites)
         searched = porsche_sites[:FORUM_LIMIT]
         self.assertEqual(FORUM_LIMIT, 4)
         self.assertIn("pelicanparts.com", searched)
-        self.assertNotIn("car-part.com", searched)
-        self.assertNotIn("hemmings.com", searched)
+        for domain in ("car-part.com", "row52.com", "hemmings.com", "bringatrailer.com"):
+            self.assertNotIn(domain, porsche_sites)
+        mercedes = get_forum_sites("Mercedes-Benz")
+        self.assertEqual(mercedes[3], "grassrootsmotorsports.com")
+        self.assertNotIn("hemmings.com", mercedes)
         self.assertIn("thesamba.com", get_forum_sites("Volkswagen"))
         self.assertIn("ferrarichat.com", get_forum_sites("Ferrari"))
         self.assertIn("corvetteforums.com", get_forum_sites("Cadillac"))
@@ -267,3 +269,74 @@ class FindTests(unittest.TestCase):
         self.assertTrue(any(row.get("site") == "rennlist.com" for row in found["listings"]))
         self.assertTrue(any(row["source"] == "brave" for row in found["skipped"]))
         self.assertNotIn("bimmerforums.com", " ".join(brave))
+        self.assertNotIn("car-part.com", " ".join(brave))
+
+    def test_ebay_returns_up_to_twenty_listings(self):
+        class Ebay:
+            def search_parts(self, _query, limit=10):
+                self.limit = limit
+                return [
+                    {"title": f"brake caliper {index}", "itemWebUrl": f"https://www.ebay.com/itm/{index}"}
+                    for index in range(limit)
+                ]
+
+        ebay = Ebay()
+
+        def get_status(url, **_kwargs):
+            class Response:
+                status_code = 200
+                text = ""
+                headers = {}
+
+            if "search.brave.com" in url or "reddit.com" in url or "craigslist" in url:
+                return Response()
+            return Response()
+
+        found = find_listings(
+            "brake caliper",
+            make="Porsche",
+            model="911",
+            year="2015",
+            ebay=ebay,
+            old_cars=lambda _text: [],
+            get=get_status,
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+        )
+        ebay_rows = [row for row in found["listings"] if row["source"] == "ebay"]
+        self.assertEqual(ebay.limit, 20)
+        self.assertEqual(len(ebay_rows), 20)
+
+    def test_shared_sites_run_for_a_make_that_fills_the_forum_cap(self):
+        called = []
+
+        def get_status(url, **_kwargs):
+            called.append(url)
+
+            class Response:
+                headers = {}
+
+                def __init__(self, body):
+                    self.status_code = 200
+                    self.text = body
+
+            if "site%3Acar-part.com" in url:
+                return Response(
+                    '<a href="https://www.car-part.com/caliper">brake caliper for sale</a>'
+                )
+            return Response("")
+
+        found = find_listings(
+            "brake caliper",
+            make="Porsche",
+            ebay=EbayNotConfigured("eBay keys are not set."),
+            old_cars=lambda _text: [],
+            get=get_status,
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+        )
+        brave = [url for url in called if "search.brave.com" in url]
+        for domain in ("car-part.com", "row52.com", "hemmings.com", "bringatrailer.com"):
+            self.assertTrue(any(domain in url for url in brave), domain)
+        self.assertTrue(any(row.get("site") == "car-part.com" for row in found["listings"]))
+        self.assertLessEqual(sum("rennlist.com" in url or "pelicanparts.com" in url or "planet-9.com" in url or "flatsixes.com" in url for url in brave), 4)

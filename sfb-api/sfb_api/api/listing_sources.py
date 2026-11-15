@@ -61,6 +61,17 @@ def accessible_sources():
             "focus": "Forum listings for the matching make",
         })
         seen.add(source_id)
+    for domain in SHARED_SITES:
+        source_id = forum_source_id(domain)
+        if source_id in seen:
+            continue
+        rows.append({
+            "id": source_id,
+            "name": domain,
+            "method": "site-search",
+            "focus": "Salvage and auction listings on every search",
+        })
+        seen.add(source_id)
     return rows
 
 
@@ -237,10 +248,17 @@ FORUM_SITES = {
         "maseratilife.com",
     ],
     "classic": [
-        "hemmings.com", "bringatrailer.com", "car-part.com", "row52.com",
         "grassrootsmotorsports.com", "stovebolt.com", "hagerty.com",
     ],
 }
+
+# Salvage and auction sites. These run on every search, outside the forum cap.
+SHARED_SITES = (
+    "car-part.com",
+    "row52.com",
+    "hemmings.com",
+    "bringatrailer.com",
+)
 
 FORUM_LIMIT = 4
 

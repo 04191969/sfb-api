@@ -20,6 +20,7 @@ from .listing_sources import (
     brave_results,
     craigslist_city_url,
     forum_source_id,
+    SHARED_SITES,
     get_forum_sites,
     get_subs_for_vehicle,
     keep_listing,
@@ -69,7 +70,7 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
                 {"part_name": part_name},
                 {"year": year, "make": make, "model": model},
             )
-            for item in ebay.search_parts(query, limit=5):
+            for item in ebay.search_parts(query, limit=20):
                 listings.append({
                     "source": "ebay",
                     "title": (item.get("title") or "")[:180],
@@ -104,10 +105,11 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     listings.extend(_reddit(part_name, make, model, get, pause, skipped))
     listings.extend(_safe("rennlist", RENNLIST_RSS, part_name, get, pause, skipped))
     listings.extend(_forums(part_name, make, get, pause, skipped))
+    listings.extend(_shared_listings(part_name, get, pause, skipped))
 
     found = {
         "query": text,
-        "listings": listings[:40],
+        "listings": listings[:100],
         "skipped": skipped,
         "sources": accessible_sources(),
         "reader": None,
@@ -150,8 +152,20 @@ def _read_listings(raw_text, vehicle):
 
 def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT):
     """Read a few forums from Brave, one site per query. A refusal stops the rest."""
+    domains = get_forum_sites(make)[:max_sites]
+    return _site_search(part_name, domains, get, pause, skipped)[:12]
+
+
+def _shared_listings(part_name, get, pause, skipped):
+    """Salvage and auction sites run on every search, unless Brave already refused."""
+    if any(row.get("source") == "brave" for row in skipped):
+        return []
+    return _site_search(part_name, SHARED_SITES, get, pause, skipped)
+
+
+def _site_search(part_name, domains, get, pause, skipped):
     kept = []
-    for domain in get_forum_sites(make)[:max_sites]:
+    for domain in domains:
         try:
             page = fetch_catalog(
                 brave_forum_url(part_name, domain),
@@ -173,7 +187,7 @@ def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT):
             item["source"] = forum_source_id(domain)
             item["site"] = domain
             kept.append(item)
-    return kept[:12]
+    return kept
 
 
 def _craigslist(part_name, get, pause, skipped, max_cities=5):

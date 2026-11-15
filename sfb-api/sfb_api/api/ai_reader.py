@@ -128,7 +128,7 @@ def read_listings(raw_text, vehicle):
     """Structured listings from forum, auction, and feed text. Nothing is saved."""
     if not settings.OPENAI_API_KEY:
         raise ReaderUnavailable("OPENAI_API_KEY is not set.")
-    clipped = (raw_text or "").strip()[:8000]
+    clipped = (raw_text or "").strip()[:48000]
     if not clipped:
         return []
 
@@ -151,8 +151,8 @@ def read_listings(raw_text, vehicle):
         ],
         response_format={"type": "json_object"},
         temperature=0.1,
-        max_tokens=4000,
-        timeout=45,
+        max_tokens=8000,
+        timeout=60,
     )
     payload = json.loads(response.choices[0].message.content or "{}")
     listings = payload.get("listings") if isinstance(payload, dict) else None
