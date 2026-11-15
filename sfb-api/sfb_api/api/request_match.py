@@ -25,6 +25,23 @@ def tokens(text):
     return re.findall(r"[a-z0-9]+", str(text or "").casefold())
 
 
+def _phrase_text(text):
+    """Keep a fraction with its inch mark, as in 3/8-inch."""
+    def replace(match):
+        return f" {match.group(1)}/{match.group(2)}-inch "
+
+    return re.sub(
+        r"(\d+)\s*/\s*(\d+)\s*(?:\"|″|''|inches?\b)?",
+        replace,
+        str(text or ""),
+        flags=re.IGNORECASE,
+    )
+
+
+def phrase_tokens(text):
+    return re.findall(r"\d+/\d+-inch|[a-z0-9]+", _phrase_text(text).casefold())
+
+
 def _head(requested):
     words = [word for word in tokens(requested) if len(word) > 2]
     return words[-1] if words else ""
@@ -57,7 +74,7 @@ def _kit_is_ambiguous(requested, text):
 
 
 def _offered_phrase(text, conflict):
-    words = tokens(text)
+    words = phrase_tokens(text)
     if conflict not in words:
         return conflict
     index = words.index(conflict)

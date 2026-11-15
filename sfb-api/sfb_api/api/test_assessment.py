@@ -132,7 +132,7 @@ class AssessmentTests(unittest.TestCase):
         store.upsert([asking("earlier", "ABC123", "42.00", title="Front brake caliper")])
 
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [{
                     "title": "Front brake caliper",
                     "itemWebUrl": "https://www.ebay.com/itm/9",
@@ -183,6 +183,7 @@ class AssessmentTests(unittest.TestCase):
             "Disc Brake Caliper Piston": "caliper piston",
             "GENUINE PORSCHE Brake Caliper Bolt": "caliper bolt",
             "Car Rear Disc Brake Piston Caliper Wind Back Tool": "back tool",
+            'Car Rear Disc Brake Piston Caliper Wind Back 3/8" Drive Tool': "3/8-inch drive tool",
         }
         for title, offered in samples.items():
             match = classify_listing("brake caliper", {"title": title}, vehicle)
@@ -198,6 +199,13 @@ class AssessmentTests(unittest.TestCase):
             self.assertNotIn("not the requested", match["reason"])
         kit = classify_listing("brake caliper", {"title": "Brake Caliper Kit"}, vehicle)
         self.assertIn("complete brake caliper or a kit", kit["reason"])
+        fraction = classify_listing(
+            "brake caliper",
+            {"title": 'Wind Back 3/8" Drive Tool'},
+            vehicle,
+        )
+        self.assertEqual(fraction["status"], "conflict")
+        self.assertEqual(fraction["offered"], "3/8-inch drive tool")
         hardware = classify_listing("brake caliper", {"title": "Brake caliper hardware kit"}, vehicle)
         self.assertEqual(hardware["status"], "conflict")
 

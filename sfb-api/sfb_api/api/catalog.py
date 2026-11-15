@@ -114,6 +114,38 @@ def _missing_fitment_column(exc):
     return any(name in message for name in ("confidence", "qualifier", "match_method"))
 
 
+def oem_numbers_for_request(part_name, make, model, year, limit=3):
+    """Manufacturer numbers the catalog fits to this vehicle and part. Other products are left out."""
+    from .request_match import _conflict_word, _head, tokens
+
+    year_number = int(str(year).strip())
+    head = _head(part_name)
+    found = []
+    seen = set()
+    for vehicle in search_vehicles(make, model, year_number)[:4]:
+        rows = fitment_for_vehicle(vehicle["id"])
+        parts = rows_by_id(
+            "parts",
+            [row.get("part_id") for row in rows],
+            "id,part_name,oem_part_number",
+        )
+        for part in parts.values():
+            name = part.get("part_name") or ""
+            if _conflict_word(part_name, name):
+                continue
+            if head and head not in set(tokens(name)):
+                continue
+            oem = str(part.get("oem_part_number") or "").strip()
+            key = oem.casefold()
+            if not oem or key in seen:
+                continue
+            seen.add(key)
+            found.append(oem)
+            if len(found) >= limit:
+                return found
+    return found
+
+
 def fitment_for_vehicle(vehicle_id):
     client = get_supabase()
 

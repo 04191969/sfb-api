@@ -338,6 +338,7 @@ def add_assessment(found, evidence=None, today=None, confirm_fitment=None):
         record["side"] = item.get("side")
         record["assembly"] = item.get("assembly")
         record["request_match"] = item.get("request_match")
+        record["fitment_claims"] = item.get("fitment_claims")
         item["assessment"] = assess_listing(
             record, stored, interchange, today=today, qualifying_keys=qualifying,
         )

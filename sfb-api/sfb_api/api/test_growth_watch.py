@@ -31,7 +31,14 @@ from sfb_api.api.catalog_route import (
     retry_wait,
 )
 from sfb_api.api.catalog_shape import fitment_vehicles
-from sfb_api.api.ebay_client import build_query, listing_matches, price_filter, token_deadline, token_is_current
+from sfb_api.api.ebay_client import (
+    build_query,
+    listing_matches,
+    price_filter,
+    relevance_query,
+    token_deadline,
+    token_is_current,
+)
 
 ROCKAUTO_TREE = """
 <a class="navlabellink" href="/en/catalog/porsche,1987,911,3.2l+h6,1262797">3.2L H6</a>
@@ -122,6 +129,10 @@ class EbayQueryTests(unittest.TestCase):
             {"year": 1987, "make": "Porsche", "model": "911"},
         )
         self.assertEqual(query, "Brake Pad 1987 Porsche 911")
+        self.assertEqual(
+            relevance_query("brake caliper", "2015", "Porsche", "911"),
+            '"brake caliper" 2015 Porsche 911',
+        )
 
     def test_relevance_accepts_oem_or_name_and_make(self):
         part = {"part_name": "Brake Pad", "oem_part_number": "91135194903"}

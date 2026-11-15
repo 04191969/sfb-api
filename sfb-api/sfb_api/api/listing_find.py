@@ -10,7 +10,7 @@ import time
 
 from .assessment import part_number_of, verified_part_number
 from .catalog_fetch import CatalogBlocked, CatalogMissing, fetch_catalog
-from .ebay_client import EbayBrowseClient, EbayNotConfigured, build_query, listing_facts
+from .ebay_client import EbayBrowseClient, EbayNotConfigured, build_query, listing_facts, relevance_query
 from .listing_sources import (
     CL_CITIES,
     OLD_CARS_LIVE,
@@ -96,10 +96,68 @@ def _merge_facts(listing, facts):
     listing["identifiers"] = merged
     for field in (
         "price_amount", "price_currency", "shipping_amount",
-        "shipping_currency", "item_country",
+        "shipping_currency", "item_country", "configuration", "side", "assembly",
     ):
         if listing.get(field) in (None, "") and facts.get(field) not in (None, ""):
             listing[field] = facts[field]
+    claims = list(listing.get("fitment_claims") or [])
+    seen_claims = {(item.get("type"), str(item.get("value") or "").casefold()) for item in claims}
+    for item in facts.get("fitment_claims") or []:
+        key = (item.get("type"), str(item.get("value") or "").casefold())
+        if not item.get("value") or key in seen_claims:
+            continue
+        seen_claims.add(key)
+        claims.append(item)
+    if claims:
+        listing["fitment_claims"] = claims
+
+
+def _catalog_oem_numbers(part_name, year, make, model):
+    """Catalog numbers for this request. A missing catalog leaves discovery on the part name."""
+    from django.conf import settings
+
+    if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
+        return []
+    if not str(year or "").strip().isdigit() or not make or not model or not part_name:
+        return []
+    try:
+        from .catalog import oem_numbers_for_request
+
+        return oem_numbers_for_request(part_name, make, model, year)
+    except Exception:
+        return []
+
+
+def _ebay_hit(item):
+    facts = listing_facts(item)
+    return {
+        "source": "ebay",
+        "title": (item.get("title") or "")[:180],
+        "url": item.get("itemWebUrl") or item.get("itemAffiliateWebUrl") or "",
+        "snippet": "",
+        "item_id": facts["item_id"],
+        "price_amount": facts["price_amount"],
+        "price_currency": facts["price_currency"],
+        "shipping_amount": facts["shipping_amount"],
+        "shipping_currency": facts["shipping_currency"],
+        "item_country": facts["item_country"],
+        "identifiers": facts["identifiers"],
+        "fitment_claims": facts["fitment_claims"],
+        "configuration": facts["configuration"],
+        "side": facts["side"],
+        "assembly": facts["assembly"],
+    }
+
+
+def _collect_ebay(ebay, query, listings, seen, limit):
+    for item in ebay.search_parts(query, limit=limit, sort=None):
+        hit = _ebay_hit(item)
+        item_id = hit["item_id"]
+        if item_id and item_id in seen:
+            continue
+        if item_id:
+            seen.add(item_id)
+        listings.append(hit)
 
 
 def _fill_part_numbers(ebay, listings, time_left):
@@ -169,25 +227,29 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
         skipped.append({"source": "ebay", "reason": str(ebay)})
     else:
         try:
-            query = build_query(
-                {"part_name": part_name},
-                {"year": year, "make": make, "model": model},
+            seen = set()
+            vehicle_fields = {"year": year, "make": make, "model": model}
+            for number in _catalog_oem_numbers(part_name, year, make, model):
+                if time_left() < 40:
+                    break
+                try:
+                    _collect_ebay(
+                        ebay,
+                        build_query({"part_name": part_name, "oem_part_number": number}, vehicle_fields),
+                        listings,
+                        seen,
+                        limit=8,
+                    )
+                except Exception as exc:
+                    skipped.append({"source": "ebay", "reason": str(exc)})
+                    break
+            _collect_ebay(
+                ebay,
+                relevance_query(part_name, year, make, model),
+                listings,
+                seen,
+                limit=20,
             )
-            for item in ebay.search_parts(query, limit=20):
-                facts = listing_facts(item)
-                listings.append({
-                    "source": "ebay",
-                    "title": (item.get("title") or "")[:180],
-                    "url": item.get("itemWebUrl") or item.get("itemAffiliateWebUrl") or "",
-                    "snippet": "",
-                    "item_id": facts["item_id"],
-                    "price_amount": facts["price_amount"],
-                    "price_currency": facts["price_currency"],
-                    "shipping_amount": facts["shipping_amount"],
-                    "shipping_currency": facts["shipping_currency"],
-                    "item_country": facts["item_country"],
-                    "identifiers": facts["identifiers"],
-                })
             _fill_part_numbers(ebay, listings, time_left)
         except Exception as exc:
             skipped.append({"source": "ebay", "reason": str(exc)})

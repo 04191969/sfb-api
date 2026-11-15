@@ -48,6 +48,17 @@ def build_query(part, vehicle):
     ).strip()
 
 
+def relevance_query(part_name, year="", make="", model=""):
+    """Buyer search. A multi-word part stays one phrase so the words are not split apart."""
+    name = " ".join(str(part_name or "").split())
+    if " " in name:
+        name = f'"{name}"'
+    return build_query(
+        {"part_name": name},
+        {"year": year, "make": make, "model": model},
+    )
+
+
 def listing_matches(item, part, vehicle):
     """Keep a listing when the title contains the OEM number, or the part and the make."""
     title = (item or {}).get("title") or ""
@@ -205,6 +216,38 @@ def _aspect_values(aspect):
     return []
 
 
+def _placement_fields(value):
+    words = set(re.findall(r"[a-z]+", str(value or "").casefold()))
+    configuration = "front" if "front" in words else "rear" if "rear" in words else ""
+    side = "left" if "left" in words else "right" if "right" in words else ""
+    return configuration, side
+
+
+def _fitment_from_aspects(aspects, source):
+    """Seller or catalog statements about where a part goes. They are claims, not a match."""
+    claims = []
+    configuration = side = assembly = ""
+    for aspect in aspects or []:
+        if not isinstance(aspect, dict):
+            continue
+        name = " ".join(str(aspect.get("localizedName") or aspect.get("name") or "").casefold().replace("_", " ").split())
+        values = [str(value).strip() for value in _aspect_values(aspect) if str(value or "").strip()]
+        text = ", ".join(values)
+        if not name or not text:
+            continue
+        if "placement" in name:
+            claims.append({"source": source, "type": "placement", "value": text})
+            found_configuration, found_side = _placement_fields(text)
+            configuration = configuration or found_configuration
+            side = side or found_side
+        elif "assembly" in name:
+            claims.append({"source": source, "type": "assembly", "value": text})
+            assembly = assembly or text
+        elif name in {"fitment", "vehicle fitment", "compatibility"} or "compatible" in name:
+            claims.append({"source": source, "type": "vehicle_claim", "value": text})
+    return claims, configuration, side, assembly
+
+
 def _read_aspects(identifiers, seen, aspects, source):
     for aspect in aspects or []:
         if not isinstance(aspect, dict):
@@ -245,6 +288,10 @@ def listing_facts(item):
     # on localizedAspects, with one value field rather than a list.
     _read_aspects(identifiers, seen, product.get("aspects"), "catalog")
     _read_aspects(identifiers, seen, item.get("localizedAspects"), "seller")
+    catalog_claims, configuration, side, assembly = _fitment_from_aspects(product.get("aspects"), "catalog")
+    seller_claims, seller_configuration, seller_side, seller_assembly = _fitment_from_aspects(
+        item.get("localizedAspects"), "seller",
+    )
     return {
         "item_id": str(item.get("itemId") or "").strip(),
         "price_amount": price_amount,
@@ -253,6 +300,10 @@ def listing_facts(item):
         "shipping_currency": shipping_currency,
         "item_country": _country(item.get("itemLocation")),
         "identifiers": identifiers,
+        "fitment_claims": catalog_claims + seller_claims,
+        "configuration": seller_configuration or configuration,
+        "side": seller_side or side,
+        "assembly": seller_assembly or assembly,
     }
 
 
@@ -307,14 +358,16 @@ class EbayBrowseClient:
             self._get_token()
         return self._token
 
-    def search_parts(self, query, max_price=None, limit=10):
+    def search_parts(self, query, max_price=None, limit=10, sort="price"):
+        """sort price keeps a watch on the cheapest hits. A buyer search omits it for relevance."""
         params = {
             "q": query,
             "category_ids": PARTS_CATEGORY,
             "limit": limit,
-            "sort": "price",
             "fieldgroups": "PRODUCT",
         }
+        if sort:
+            params["sort"] = sort
         price = price_filter(max_price)
         if price:
             params["filter"] = price

@@ -378,6 +378,25 @@ def _identifier_note(listing):
     return " ".join(notes)
 
 
+def _fitment_note(listing):
+    """A seller's placement or vehicle statement stays a claim."""
+    notes = []
+    for claim in listing.get("fitment_claims") or []:
+        if not isinstance(claim, dict):
+            continue
+        value = str(claim.get("value") or "").strip()
+        if not value:
+            continue
+        kind = claim.get("type")
+        if kind == "placement":
+            notes.append(f"Seller placement {value} is not established fitment.")
+        elif kind == "vehicle_claim":
+            notes.append(f"Seller claims this fits {value}.")
+        elif kind == "assembly":
+            notes.append(f"Seller assembly {value}.")
+    return " ".join(notes)
+
+
 def _summary(market, costs, note=""):
     status = market.get("status")
     if status in ("conflict", "uncertain"):
@@ -427,7 +446,7 @@ def assess_listing(listing, evidence, interchange=None, today=None, qualifying_k
     subject["part_number"] = number
     costs = listing_costs(listing)
     match = listing.get("request_match") if isinstance(listing.get("request_match"), dict) else None
-    note = _identifier_note(listing)
+    note = " ".join(piece for piece in (_identifier_note(listing), _fitment_note(listing)) if piece)
     if match and match.get("status") in ("conflict", "uncertain"):
         market = _blocked_set(match, "asking", "item", listing.get("price_currency"))
         market["part_number"] = number or None

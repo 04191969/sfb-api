@@ -277,7 +277,7 @@ class FindTests(unittest.TestCase):
 
     def test_ebay_returns_up_to_twenty_listings(self):
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 self.limit = limit
                 return [
                     {"title": f"brake caliper {index}", "itemWebUrl": f"https://www.ebay.com/itm/{index}"}
@@ -330,7 +330,7 @@ class FindTests(unittest.TestCase):
         self.assertIsNone(listing_facts({"shippingOptions": [{"shippingCostType": "CALCULATED"}]})["shipping_amount"])
 
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [{
                     "title": "Genuine Porsche caliper bolt",
                     "itemWebUrl": "https://www.ebay.com/itm/99",
@@ -441,7 +441,7 @@ class FindTests(unittest.TestCase):
             def __init__(self):
                 self.detail_calls = []
 
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [{
                     "title": "Genuine Porsche caliper bolt",
                     "itemWebUrl": "https://www.ebay.com/itm/1",
@@ -488,7 +488,7 @@ class FindTests(unittest.TestCase):
         called = {"read": 0, "detail": 0, "brave": 0}
 
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [{
                     "title": "Genuine Porsche caliper bolt",
                     "itemWebUrl": "https://www.ebay.com/itm/1",
@@ -551,7 +551,7 @@ class FindTests(unittest.TestCase):
         self.assertEqual(part_number_of({"identifiers": facts["identifiers"]}), "")
 
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [{
                     "title": "Caliper wind back tool",
                     "itemWebUrl": "https://www.ebay.com/itm/2",
@@ -592,7 +592,7 @@ class FindTests(unittest.TestCase):
         clock = {"t": 0}
 
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [
                     {
                         "title": f"Caliper {index}",
@@ -659,7 +659,7 @@ class FindTests(unittest.TestCase):
         calls = []
 
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [
                     {
                         "title": "Cached caliper bolt",
@@ -745,6 +745,48 @@ class FindTests(unittest.TestCase):
         self.assertEqual(client.peek_item("v1|cached|0"), first)
         clear_item_cache()
 
+    def test_a_buyer_search_uses_relevance_and_keeps_a_placement_as_a_claim(self):
+        calls = []
+
+        class Ebay:
+            def search_parts(self, query, limit=10, sort=None):
+                calls.append((query, sort, limit))
+                if calls:
+                    return [{
+                        "title": "Front left brake caliper",
+                        "itemWebUrl": "https://www.ebay.com/itm/8",
+                        "itemId": "v1|8|0",
+                        "price": {"value": "240.00", "currency": "USD"},
+                        "localizedAspects": [
+                            {"name": "Placement on Vehicle", "value": "Front, Left"},
+                            {"name": "Compatible Vehicle", "value": "2015 Porsche 911"},
+                        ],
+                    }]
+                return []
+
+        found = find_listings(
+            "brake caliper",
+            make="Porsche",
+            model="911",
+            year="2015",
+            ebay=Ebay(),
+            old_cars=lambda _text: [],
+            get=lambda *_args, **_kwargs: type("Response", (), {"status_code": 200, "text": "", "headers": {}})(),
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+            confirm_fitment=lambda *_args: False,
+        )
+        self.assertEqual(calls[0][0], '"brake caliper" 2015 Porsche 911')
+        self.assertIsNone(calls[0][1])
+        row = next(item for item in found["listings"] if item["source"] == "ebay")
+        self.assertEqual(row["configuration"], "front")
+        self.assertEqual(row["side"], "left")
+        self.assertEqual(row["assembly"], "")
+        self.assertEqual(row["request_match"]["status"], "uncertain")
+        self.assertIn("Seller placement Front, Left is not established fitment.", row["assessment"]["summary"])
+        self.assertIn("Seller claims this fits 2015 Porsche 911.", row["assessment"]["summary"])
+        self.assertNotEqual(row["assessment"]["market"]["status"], "limited")
+
     def test_a_seller_sku_stays_out_of_the_manufacturer_number(self):
         facts = listing_facts({
             "itemId": "v1|3|0",
@@ -763,7 +805,7 @@ class FindTests(unittest.TestCase):
 
     def test_the_reader_product_can_reject_a_vague_title(self):
         class Ebay:
-            def search_parts(self, _query, limit=10):
+            def search_parts(self, _query, limit=10, sort=None):
                 return [{
                     "title": "Porsche item",
                     "itemWebUrl": "https://www.ebay.com/itm/4",
