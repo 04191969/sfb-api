@@ -31,7 +31,7 @@ class CatalogMissing(Exception):
         super().__init__(f"{status} {url}")
 
 
-def fetch_catalog(url, timeout=20, pause=None, get=None, headers=None):
+def fetch_catalog(url, timeout=20, pause=None, get=None, headers=None, retry_rate_limit=True):
     pause = pause or time.sleep
     get = get or httpx.get
     sent = {"User-Agent": USER_AGENT, "Accept": "text/html"}
@@ -52,7 +52,10 @@ def fetch_catalog(url, timeout=20, pause=None, get=None, headers=None):
                 pause(2)
                 continue
             raise CatalogMissing(0, url) from exc
-        decision = fetch_decision(response.status_code, attempt)
+        decision = fetch_decision(
+            response.status_code,
+            attempt if retry_rate_limit else 1,
+        )
         if decision == "retry":
             pause(retry_wait(response.headers.get("Retry-After")))
             continue

@@ -1,17 +1,18 @@
 """Places a parts search can read besides the stored catalog.
 
 Craigslist is read from city RSS feeds. Reddit is read from its public JSON
-search, and only the subs for that make. A site: search does not see either
-one. Facebook Marketplace and LKQ have no public feed, so they are listed
-and never fetched.
+search, and only the subs for that make. Forums are read from Brave's public
+search, one site at a time. Facebook Marketplace and LKQ have no public feed,
+so they are listed and never fetched.
 """
 
 import json
 import re
+from html import unescape
 from urllib.parse import urlencode, urlparse
 from xml.etree import ElementTree
 
-BING_RSS = "https://www.bing.com/search"
+BRAVE_SEARCH = "https://search.brave.com/search"
 RENNLIST_RSS = "https://rennlist.com/forums/external.php?type=rss2"
 ROCKAUTO_RSS = "https://www.rockauto.com/RSS/vehiclefeeds.php"
 OLD_CARS_LIVE = "https://api.oldcarsdata.com/auctions/live"
@@ -241,7 +242,7 @@ FORUM_SITES = {
     ],
 }
 
-FORUM_LIMIT = 8
+FORUM_LIMIT = 4
 
 _SALE_TITLE = re.compile(r"\[(?:for sale|fs|wts)\]|\bfor sale\b|\bwts\b|(?:^|\s)fs(?:\s|:|-)", re.I)
 
@@ -334,11 +335,63 @@ def get_forum_sites(make):
     return sites
 
 
-def bing_forum_url(part_name, domains, sale=True):
-    """One public search for these forums. The forum sites themselves are not requested."""
-    sites = " OR ".join(f"site:{domain}" for domain in domains)
-    words = f'"for sale" {part_name}' if sale else str(part_name)
-    return BING_RSS + "?" + urlencode({"format": "rss", "q": f"({sites}) {words}"})
+_ANCHOR = re.compile(
+    r'<a\b[^>]*\bhref=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+    re.I | re.S,
+)
+_PAIR = re.compile(
+    r'"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*,\s*"url"\s*:\s*"(https?:\\?/\\?/[^"]+)"'
+    r'|"url"\s*:\s*"(https?:\\?/\\?/[^"]+)"\s*,\s*"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"',
+    re.S,
+)
+_TAG = re.compile(r"<[^>]+>")
+
+
+def brave_forum_url(part_name, domain):
+    """One public Brave search for one forum. A combined OR query drops the other sites."""
+    query = f'site:{domain} "for sale" {part_name}'
+    return BRAVE_SEARCH + "?" + urlencode({"q": query})
+
+
+def _on_domain(url, domain):
+    host = (urlparse(url or "").hostname or "").casefold()
+    if host.startswith("www."):
+        host = host[4:]
+    return host == domain or host.endswith("." + domain)
+
+
+def _plain(value):
+    text = unescape(str(value or "")).replace("\\/", "/")
+    return " ".join(_TAG.sub(" ", text).split())
+
+
+def brave_results(html, domain, limit=3):
+    """Listing links on this forum. Other sites on the page are left out."""
+    page = re.sub(r"<script\b[^>]*>.*?</script>", " ", html or "", flags=re.I | re.S)
+    page = re.sub(r"<style\b[^>]*>.*?</style>", " ", page, flags=re.I | re.S)
+    items = []
+    seen = set()
+
+    def add(url, title):
+        url = _plain(url)
+        title = _plain(title)[:180]
+        if not title or not _on_domain(url, domain) or url in seen:
+            return
+        seen.add(url)
+        items.append({"title": title, "url": url, "snippet": ""})
+
+    for match in _ANCHOR.finditer(page):
+        add(match.group(1), match.group(2))
+        if len(items) == limit:
+            return items
+    for match in _PAIR.finditer(html or ""):
+        if match.group(1):
+            add(match.group(2), match.group(1))
+        else:
+            add(match.group(3), match.group(4))
+        if len(items) == limit:
+            break
+    return items
 
 
 def domain_for_url(url):

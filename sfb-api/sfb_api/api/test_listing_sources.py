@@ -11,8 +11,10 @@ from sfb_api.api.ebay_client import EbayNotConfigured
 from sfb_api.api.listing_find import find_listings
 from sfb_api.api.listing_sources import (
     CL_CITIES,
+    FORUM_LIMIT,
     accessible_sources,
-    bing_forum_url,
+    brave_forum_url,
+    brave_results,
     craigslist_city_url,
     get_forum_sites,
     get_subs_for_vehicle,
@@ -80,19 +82,28 @@ class SourceListTests(unittest.TestCase):
         self.assertEqual(porsche_sites[0], "rennlist.com")
         self.assertIn("hemmings.com", porsche_sites)
         self.assertNotIn("bimmerforums.com", porsche_sites)
-        searched = porsche_sites[:8]
+        searched = porsche_sites[:FORUM_LIMIT]
+        self.assertEqual(FORUM_LIMIT, 4)
         self.assertIn("pelicanparts.com", searched)
         self.assertNotIn("car-part.com", searched)
+        self.assertNotIn("hemmings.com", searched)
         self.assertIn("thesamba.com", get_forum_sites("Volkswagen"))
         self.assertIn("ferrarichat.com", get_forum_sites("Ferrari"))
         self.assertIn("corvetteforums.com", get_forum_sites("Cadillac"))
         self.assertIn("AlfaRomeo", get_subs_for_vehicle("Alfa Romeo"))
-        query = bing_forum_url("brake caliper", ["r3vlimited.com"], sale=True)
+        query = brave_forum_url("brake caliper", "r3vlimited.com")
+        self.assertTrue(query.startswith("https://search.brave.com/search?"))
         self.assertIn("site%3Ar3vlimited.com", query)
         self.assertIn("%22for+sale%22", query)
-        self.assertNotIn("site%3Ar3vlimited.com", bing_forum_url("brake caliper", ["miata.net"]))
-        plain = bing_forum_url("brake caliper", ["r3vlimited.com"], sale=False)
-        self.assertNotIn("%22for+sale%22", plain)
+        self.assertNotIn("miata.net", query)
+        page = (
+            '<a href="https://www.pelicanparts.com/porsche/caliper">'
+            "Front brake caliper for sale</a>"
+            '<a href="https://www.ebay.com/itm/1">brake caliper</a>'
+        )
+        found = brave_results(page, "pelicanparts.com")
+        self.assertEqual(found[0]["url"], "https://www.pelicanparts.com/porsche/caliper")
+        self.assertEqual(len(found), 1)
         self.assertEqual(source_for_url("https://www.thesamba.com/vw/1"), "thesamba")
 
     def test_rss_keeps_a_part_mention(self):
@@ -135,7 +146,6 @@ class FindTests(unittest.TestCase):
         reasons = {row["source"]: row["reason"] for row in found["skipped"]}
         self.assertIn("craigslist", reasons)
         self.assertIn("rockauto", reasons)
-        self.assertTrue(any(row["source"] == "pelicanparts" for row in found["listings"]))
         self.assertTrue(any(row["source"] == "rennlist" for row in found["listings"]))
         self.assertIn("pelicanparts.com", seen["raw"])
         self.assertNotIn("bimmerforums.com", seen["raw"])
@@ -214,3 +224,46 @@ class FindTests(unittest.TestCase):
         self.assertIn("Porsche", subs)
         self.assertEqual(len(subs), 1)
         self.assertEqual(reddit_posts(reddit, "Porsche")[0]["title"], "[WTS] IMS bearing")
+
+    def test_a_brave_refusal_stops_the_remaining_forums(self):
+        page = (
+            '<a href="https://rennlist.com/forums/market/1">'
+            "FS brake caliper for a 911</a>"
+        )
+        called = []
+
+        def get_status(url, **_kwargs):
+            called.append(url)
+
+            class Response:
+                headers = {}
+
+                def __init__(self, status, body):
+                    self.status_code = status
+                    self.text = body
+
+            if "craigslist" in url:
+                return Response(403, "")
+            if "reddit.com" in url:
+                return Response(200, '{"data":{"children":[]}}')
+            if "search.brave.com" in url and "rennlist.com" in url:
+                return Response(200, page)
+            if "search.brave.com" in url:
+                return Response(429, "")
+            return Response(200, FEED)
+
+        found = find_listings(
+            "brake caliper",
+            make="Porsche",
+            ebay=EbayNotConfigured("eBay keys are not set."),
+            old_cars=lambda _text: [],
+            get=get_status,
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+        )
+        brave = [url for url in called if "search.brave.com" in url]
+        self.assertEqual(len(brave), 2)
+        self.assertIn("rennlist.com", brave[0])
+        self.assertTrue(any(row.get("site") == "rennlist.com" for row in found["listings"]))
+        self.assertTrue(any(row["source"] == "brave" for row in found["skipped"]))
+        self.assertNotIn("bimmerforums.com", " ".join(brave))

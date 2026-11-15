@@ -16,9 +16,9 @@ from .listing_sources import (
     RENNLIST_RSS,
     FORUM_LIMIT,
     accessible_sources,
-    bing_forum_url,
+    brave_forum_url,
+    brave_results,
     craigslist_city_url,
-    domain_for_url,
     forum_source_id,
     get_forum_sites,
     get_subs_for_vehicle,
@@ -149,41 +149,31 @@ def _read_listings(raw_text, vehicle):
 
 
 def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT):
-    """Search the make's forums through Bing. A miss retries once without the sale phrase."""
-    domains = get_forum_sites(make)[:max_sites]
-    first, blocked = _forum_query(part_name, domains, True, get, pause)
-    if blocked is not None:
-        skipped.append({"source": "bing", "reason": str(blocked)})
-        return []
-    found = {item.get("site") for item in first}
-    missing = [domain for domain in domains if domain not in found]
-    second = []
-    if missing:
-        second, blocked = _forum_query(part_name, missing, False, get, pause)
-        if blocked is not None:
-            skipped.append({"source": "bing", "reason": str(blocked)})
-    return (first + second)[:15]
-
-
-def _forum_query(part_name, domains, sale, get, pause):
-    if not domains:
-        return [], None
-    try:
-        items = _fetch_rss(bing_forum_url(part_name, domains, sale=sale), get, pause, limit=20)
-    except CatalogBlocked as exc:
-        return [], exc
-    except CatalogMissing:
-        return [], None
+    """Read a few forums from Brave, one site per query. A refusal stops the rest."""
     kept = []
-    allowed = set(domains)
-    for item in items:
-        domain = domain_for_url(item.get("url"))
-        if domain not in allowed or not keep_listing(item, part_name):
+    for domain in get_forum_sites(make)[:max_sites]:
+        try:
+            page = fetch_catalog(
+                brave_forum_url(part_name, domain),
+                timeout=12,
+                pause=pause,
+                get=get,
+                retry_rate_limit=False,
+            )
+        except CatalogBlocked as exc:
+            skipped.append({"source": "brave", "reason": str(exc)})
+            break
+        except CatalogMissing:
+            pause(2)
             continue
-        item["source"] = forum_source_id(domain)
-        item["site"] = domain
-        kept.append(item)
-    return kept, None
+        pause(2)
+        for item in brave_results(page, domain):
+            if not keep_listing(item, part_name):
+                continue
+            item["source"] = forum_source_id(domain)
+            item["site"] = domain
+            kept.append(item)
+    return kept[:12]
 
 
 def _craigslist(part_name, get, pause, skipped, max_cities=5):
