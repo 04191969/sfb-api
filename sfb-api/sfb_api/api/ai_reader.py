@@ -132,9 +132,15 @@ def read_listings(raw_text, vehicle, timeout=30):
     if not clipped:
         return []
 
+    import httpx
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    # One attempt. The SDK's default retries would run past the worker limit.
+    client = OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        max_retries=0,
+        timeout=httpx.Timeout(float(timeout), connect=5.0),
+    )
     response = client.chat.completions.create(
         model=settings.OPENAI_READER_MODEL,
         messages=[
@@ -151,8 +157,7 @@ def read_listings(raw_text, vehicle, timeout=30):
         ],
         response_format={"type": "json_object"},
         temperature=0.1,
-        max_tokens=8000,
-        timeout=timeout,
+        max_tokens=2500,
     )
     payload = json.loads(response.choices[0].message.content or "{}")
     listings = payload.get("listings") if isinstance(payload, dict) else None

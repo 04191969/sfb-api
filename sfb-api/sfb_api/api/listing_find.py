@@ -43,8 +43,9 @@ def _named(items, source_id, part_name, require_part=True):
     return kept
 
 
-# Gunicorn stops the worker at 90 seconds. Leave room to send the response.
-SEARCH_BUDGET = 70
+# Gunicorn stops the worker at 90 seconds. A catalog timeout is tried once,
+# so leave room for that retry and for the response itself.
+SEARCH_BUDGET = 55
 DETAIL_LIMIT = 4
 
 
@@ -64,17 +65,18 @@ def _mark_deadline(skipped):
 
 
 def _out_of_time(skipped, time_left):
-    if time_left() >= 8:
+    if time_left() >= 18:
         return False
     _mark_deadline(skipped)
     return True
 
 
-def _call_timeout(time_left, default=12):
+def _call_timeout(time_left, default=6):
+    """Per attempt. fetch_catalog tries a timeout once more, so keep each attempt short."""
     remaining = time_left()
-    if remaining < 3:
-        return 1
-    return min(default, max(1, int(remaining) - 2))
+    if remaining < 8:
+        return 2
+    return min(default, max(2, int((remaining - 12) / 2)))
 
 
 def _merge_facts(listing, facts):
@@ -107,7 +109,7 @@ def _fill_part_numbers(ebay, listings, time_left):
     for listing in listings:
         if listing.get("source") != "ebay" or part_number_of(listing):
             continue
-        if fetched >= DETAIL_LIMIT or time_left() < 30:
+        if fetched >= DETAIL_LIMIT or time_left() < 28:
             break
         fetched += 1
         try:
@@ -224,7 +226,7 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     from .evidence_store import add_assessment
 
     vehicle = {"year": year, "make": make, "model": model}
-    if time_left() < 15:
+    if time_left() < 22:
         _mark_deadline(skipped)
         found["reader"] = keep_source_facts(found["listings"], _source_reader(found["listings"]))
     else:
@@ -232,7 +234,7 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
             found,
             vehicle,
             read=read,
-            read_timeout=min(30, max(12, int(time_left()) - 8)),
+            read_timeout=min(15, max(8, int(time_left()) - 12)),
         )
     return add_assessment(found, evidence=evidence, today=today)
 
