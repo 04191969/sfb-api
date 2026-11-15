@@ -2,6 +2,7 @@
 
 import re
 
+from .catalog_parse import present_category, present_name
 from .catalog_route import confidence_label, visible_to_buyers
 
 UUID_RE = re.compile(
@@ -89,10 +90,11 @@ def group_parts(fitment_rows, parts_by_id):
     grouped = {}
     for row in fitment_rows:
         part = parts_by_id.get(row.get("part_id")) or {}
-        category = part.get("category") or "Other"
+        name = present_name(part.get("part_name"))
+        category = present_category(name, part.get("category"))
         grouped.setdefault(category, []).append({
             "id": part.get("id") or row.get("part_id"),
-            "part_name": part.get("part_name"),
+            "part_name": name,
             "category": category,
             "oem_part_number": part.get("oem_part_number"),
             "brand": part.get("brand"),

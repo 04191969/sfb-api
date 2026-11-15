@@ -20,12 +20,36 @@ _CATEGORIES = (
     ("Steering", ("steering", "tie rod", "rack")),
     ("Transmission", ("transmission", "clutch", "flywheel", "cv joint", "axle", "driveshaft")),
     ("Electrical", ("alternator", "starter", "battery", "ignition", "spark plug", "coil", "relay", "sensor", "ecu")),
-    ("HVAC", ("hvac", "heater", "blower", "compressor", "condenser", "evaporator", "a/c", "air conditioning")),
+    ("HVAC", ("hvac", "heater", "blower", "compressor", "condenser", "evaporator", "a/c", "air conditioning", "cabin")),
     ("Body", ("bumper", "fender", "hood", "door", "mirror", "grille", "panel", "trim", "window", "glass")),
     ("Interior", ("seat", "carpet", "dashboard", "console", "gauge")),
     ("Wheels & Tires", ("wheel", "tire", "rim", "hub", "bearing")),
-    ("Engine", ("engine", "piston", "crankshaft", "camshaft", "valve", "timing", "gasket", "oil pump")),
+    ("Engine", (
+        "engine", "piston", "crankshaft", "camshaft", "valve", "timing", "gasket",
+        "oil", "belt", "tensioner", "pulley", "damper", "mount", "hose", "filter",
+        "turbo", "supercharger",
+    )),
 )
+
+_CATEGORY_ALIASES = {
+    "brake": "Brakes",
+    "brakes": "Brakes",
+    "cooling": "Cooling",
+    "exhaust": "Exhaust",
+    "fuel": "Fuel System",
+    "suspension": "Suspension",
+    "steering": "Steering",
+    "transmission": "Transmission",
+    "electrical": "Electrical",
+    "hvac": "HVAC",
+    "body": "Body",
+    "interior": "Interior",
+    "wheel": "Wheels & Tires",
+    "wheels": "Wheels & Tires",
+    "tire": "Wheels & Tires",
+    "tires": "Wheels & Tires",
+    "engine": "Engine",
+}
 
 _YEAR = re.compile(r"\b(19[5-9]\d|20[0-3]\d)\b")
 _RANGE = re.compile(r"\b(19[5-9]\d|20[0-3]\d)\s*-\s*(19[5-9]\d|20[0-3]\d)\b")
@@ -38,6 +62,32 @@ def guess_category(name):
         if any(word in lowered for word in words):
             return category
     return "Other"
+
+
+def category_alias(token):
+    """A search word that names a category, such as engine or brakes."""
+    return _CATEGORY_ALIASES.get((token or "").casefold())
+
+
+def present_name(name):
+    """Readable part name. Codes and short abbreviations stay as stored."""
+    small = {"a", "an", "and", "of", "the", "for", "with"}
+    words = []
+    for index, word in enumerate(" ".join((name or "").split()).split()):
+        if any(ch.isdigit() for ch in word) or (word.isupper() and len(word) <= 5):
+            words.append(word)
+        elif index and word.casefold() in small:
+            words.append(word.casefold())
+        else:
+            words.append(word[:1].upper() + word[1:].casefold())
+    return " ".join(words)
+
+
+def present_category(name, category):
+    """Keep a real category. Other and blank get one from the part words."""
+    if category and category != "Other":
+        return category
+    return guess_category(name)
 
 
 def parse_fitment_text(text):

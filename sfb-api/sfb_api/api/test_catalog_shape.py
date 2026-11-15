@@ -68,6 +68,14 @@ class FitmentShapeTests(unittest.TestCase):
             ["Brake Caliper", "Brake Pad"],
         )
 
+    def test_other_category_uses_the_part_words(self):
+        fitment = [{"part_id": "p1", "source": "growth_rockauto", "confirmed_at": None}]
+        parts = {"p1": {"id": "p1", "part_name": "belt tensioner", "category": "Other"}}
+        categories, count = group_parts(fitment, parts)
+        self.assertEqual(count, 1)
+        self.assertEqual(categories[0]["category"], "Engine")
+        self.assertEqual(categories[0]["parts"][0]["part_name"], "Belt Tensioner")
+
     def test_cross_car_omits_the_source_vehicle(self):
         parts = [{"id": "p1", "part_name": "Brake Caliper", "category": "Brakes"}]
         fitment = [

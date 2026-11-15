@@ -66,6 +66,8 @@ SHOWME = """
 class ParseTests(unittest.TestCase):
     def test_category_uses_the_part_words(self):
         self.assertEqual(guess_category("Front Brake Pad"), "Brakes")
+        self.assertEqual(guess_category("belt tensioner"), "Engine")
+        self.assertEqual(guess_category("cabin air filter"), "HVAC")
         self.assertEqual(guess_category("Fastener kit"), "Other")
 
     def test_fitment_text_reads_year_make_model(self):

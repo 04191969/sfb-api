@@ -152,11 +152,26 @@ def fitment_for_parts(part_ids):
 
 
 def search_parts(query, tokens):
+    from .catalog_parse import category_alias
+    from .catalog_shape import present_name, present_category
+
     client = get_supabase()
-    by_name = client.table("parts").select("id,part_name,category,oem_part_number,brand")
+    columns = "id,part_name,category,oem_part_number,brand"
+    name_tokens = [token for token in tokens if not category_alias(token)]
+    categories = []
     for token in tokens:
-        by_name = by_name.ilike("part_name", f"%{_escape_exact(token)}%")
-    name_rows = by_name.order("part_name").limit(50).execute().data or []
+        alias = category_alias(token)
+        if alias and alias not in categories:
+            categories.append(alias)
+    if name_tokens:
+        by_name = client.table("parts").select(columns)
+        for token in name_tokens:
+            by_name = by_name.ilike("part_name", f"%{_escape_exact(token)}%")
+        name_rows = by_name.order("part_name").limit(50).execute().data or []
+    else:
+        name_rows = (
+            client.table("parts").select(columns).order("part_name").limit(300).execute().data or []
+        )
 
     oem_rows = []
     stripped = query.strip()
@@ -178,7 +193,11 @@ def search_parts(query, tokens):
         if row["id"] in seen:
             continue
         seen.add(row["id"])
-        merged.append(row)
+        name = present_name(row.get("part_name"))
+        category = present_category(name, row.get("category"))
+        if categories and category not in categories:
+            continue
+        merged.append({**row, "part_name": name, "category": category})
         if len(merged) == 50:
             break
     return merged
