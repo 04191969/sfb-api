@@ -11,12 +11,16 @@ import time
 from .catalog_fetch import CatalogBlocked, CatalogMissing, fetch_catalog
 from .ebay_client import EbayBrowseClient, EbayNotConfigured, build_query
 from .listing_sources import (
+    CL_CITIES,
     OLD_CARS_LIVE,
     RENNLIST_RSS,
     accessible_sources,
     bing_site_url,
-    craigslist_rss_url,
+    craigslist_city_url,
+    get_subs_for_vehicle,
     keep_listing,
+    reddit_posts,
+    reddit_search_url,
     rockauto_rss_url,
     rss_items,
     search_text,
@@ -34,10 +38,10 @@ def _named(items, source_id, part_name, require_part=True):
     return kept
 
 
-def _fetch_rss(url, get, pause):
+def _fetch_rss(url, get, pause, limit=8):
     text = fetch_catalog(url, timeout=12, pause=pause, get=get)
     pause(1)
-    return rss_items(text)
+    return rss_items(text, limit=limit)
 
 
 def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None):
@@ -93,7 +97,8 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     else:
         listings.extend(_safe("rockauto", rockauto, part_name, get, pause, skipped))
 
-    listings.extend(_safe("craigslist", craigslist_rss_url(text), part_name, get, pause, skipped))
+    listings.extend(_craigslist(part_name, get, pause, skipped))
+    listings.extend(_reddit(part_name, make, model, get, pause, skipped))
     listings.extend(_safe("rennlist", RENNLIST_RSS, part_name, get, pause, skipped))
 
     try:
@@ -125,6 +130,7 @@ def attach_reader(found, vehicle, read=None):
     lines = [
         " | ".join((
             item.get("source") or "",
+            item.get("city") or item.get("subreddit") or "",
             item.get("title") or "",
             item.get("url") or "",
             item.get("snippet") or "",
@@ -146,6 +152,57 @@ def _read_listings(raw_text, vehicle):
     from .ai_reader import read_catalog
 
     return read_catalog(raw_text, "listing-search", vehicle)
+
+
+def _craigslist(part_name, get, pause, skipped, max_cities=5):
+    """Read a few city feeds. A refused city is skipped; the next city is still tried."""
+    kept = []
+    blocked = None
+    for city in CL_CITIES[:max_cities]:
+        try:
+            for item in _named(
+                _fetch_rss(craigslist_city_url(city, part_name), get, pause, limit=10),
+                "craigslist",
+                part_name,
+            ):
+                item["city"] = city
+                kept.append(item)
+        except CatalogBlocked as exc:
+            blocked = exc
+            if exc.status == 429:
+                break
+        except CatalogMissing:
+            continue
+    if not kept and blocked is not None:
+        skipped.append({"source": "craigslist", "reason": str(blocked)})
+    return kept[:15]
+
+
+def _reddit(part_name, make, model, get, pause, skipped, max_subs=15):
+    """Read the make's subs from Reddit's JSON search. A refusal stops the rest of Reddit."""
+    kept = []
+    blocked = None
+    for subreddit in get_subs_for_vehicle(make, model)[:max_subs]:
+        try:
+            payload = fetch_catalog(
+                reddit_search_url(subreddit, part_name),
+                timeout=10,
+                pause=pause,
+                get=get,
+                headers={"Accept": "application/json"},
+            )
+            pause(1.1)
+        except CatalogBlocked as exc:
+            blocked = exc
+            break
+        except CatalogMissing:
+            continue
+        for item in reddit_posts(payload, subreddit):
+            if keep_listing(item, part_name):
+                kept.append(item)
+    if not kept and blocked is not None:
+        skipped.append({"source": "reddit", "reason": str(blocked)})
+    return kept[:15]
 
 
 def _safe(source_id, url, part_name, get, pause, skipped):
