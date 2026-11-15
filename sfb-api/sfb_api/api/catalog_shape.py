@@ -123,6 +123,7 @@ def fitment_vehicles(fitment_rows, vehicles_by_id, exclude_vehicle_id=None):
         seen.add(vehicle_id)
         entry = {
             "id": vehicle.get("id") or row.get("vehicle_id"),
+            "fitment_id": row.get("id"),
             "year": vehicle.get("year"),
             "make": vehicle.get("make"),
             "model": vehicle.get("model"),
