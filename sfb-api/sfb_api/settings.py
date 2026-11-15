@@ -42,12 +42,16 @@ REST_FRAMEWORK = {
     ],
 }
 
-# CORS — allow Lovable frontend
+# CORS — allow the published Lovable site, its editor preview, and local dev.
 CORS_ALLOWED_ORIGINS = [
     'https://sfb-demo.lovable.app',
     'https://bright-web-workshop-37.lovable.app',
     'http://localhost:5173',
     'http://localhost:3000',
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://[\w-]+\.lovable\.app$',
+    r'^https://[\w.-]+\.lovableproject\.com$',
 ]
 CORS_ALLOW_HEADERS = (*default_headers, 'x-sfb-key')
 CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL', 'False').lower() == 'true'
