@@ -7,11 +7,13 @@ Token handling follows Nu World Lab: cache the application token until
 import base64
 import os
 import time
+from urllib.parse import quote
 
 import httpx
 
 TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+ITEM_URL = "https://api.ebay.com/buy/browse/v1/item/"
 PARTS_CATEGORY = "6030"
 SCOPE = "https://api.ebay.com/oauth/api_scope"
 
@@ -104,6 +106,26 @@ def _aspect_kind(name):
     return ""
 
 
+def _aspect_values(aspect):
+    values = aspect.get("localizedValues") or aspect.get("values") or []
+    if values:
+        return values
+    if aspect.get("value") not in (None, ""):
+        return [aspect.get("value")]
+    return []
+
+
+def _read_aspects(identifiers, seen, aspects):
+    for aspect in aspects or []:
+        if not isinstance(aspect, dict):
+            continue
+        kind = _aspect_kind(aspect.get("localizedName") or aspect.get("name"))
+        if not kind:
+            continue
+        for value in _aspect_values(aspect):
+            _add_identifier(identifiers, seen, kind, value)
+
+
 def listing_facts(item):
     """Price, shipping, and part identifiers eBay returned. Missing amounts stay unknown."""
     item = item or {}
@@ -124,15 +146,10 @@ def listing_facts(item):
     for value in product.get("gtins") or []:
         _add_identifier(identifiers, seen, "gtin", value)
     _add_identifier(identifiers, seen, "epid", product.get("epid"))
-    for aspect in product.get("aspects") or []:
-        if not isinstance(aspect, dict):
-            continue
-        kind = _aspect_kind(aspect.get("localizedName") or aspect.get("name"))
-        if not kind:
-            continue
-        values = aspect.get("localizedValues") or aspect.get("values") or []
-        for value in values:
-            _add_identifier(identifiers, seen, kind, value)
+    # Search puts catalog aspects on product. The item call puts seller specifics
+    # on localizedAspects, with one value field rather than a list.
+    _read_aspects(identifiers, seen, product.get("aspects"))
+    _read_aspects(identifiers, seen, item.get("localizedAspects"))
     return {
         "item_id": str(item.get("itemId") or "").strip(),
         "price_amount": price_amount,
@@ -220,13 +237,34 @@ class EbayBrowseClient:
             self._clear_token()
             raise
 
-    def _get(self, params):
+    def get_item(self, item_id):
+        """One listing, including seller item specifics the search summary omits."""
+        item_id = str(item_id or "").strip()
+        if not item_id:
+            return {}
+        url = ITEM_URL + quote(item_id, safe="")
+        try:
+            response = self._request(url, timeout=6)
+            if response.status_code == 401:
+                self._clear_token()
+                self._get_token()
+                response = self._request(url, timeout=6)
+            response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, dict) else {}
+        except httpx.HTTPError:
+            raise
+
+    def _request(self, url, params=None, timeout=15):
         return httpx.get(
-            SEARCH_URL,
+            url,
             headers={
                 "Authorization": f"Bearer {self.token}",
                 "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
             },
             params=params,
-            timeout=15,
+            timeout=timeout,
         )
+
+    def _get(self, params):
+        return self._request(SEARCH_URL, params=params, timeout=15)

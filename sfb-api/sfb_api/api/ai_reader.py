@@ -124,7 +124,7 @@ def read_catalog(raw_text, url, vehicle):
     return normalize_reader_parts(payload, vehicle)
 
 
-def read_listings(raw_text, vehicle):
+def read_listings(raw_text, vehicle, timeout=30):
     """Structured listings from forum, auction, and feed text. Nothing is saved."""
     if not settings.OPENAI_API_KEY:
         raise ReaderUnavailable("OPENAI_API_KEY is not set.")
@@ -152,7 +152,7 @@ def read_listings(raw_text, vehicle):
         response_format={"type": "json_object"},
         temperature=0.1,
         max_tokens=8000,
-        timeout=60,
+        timeout=timeout,
     )
     payload = json.loads(response.choices[0].message.content or "{}")
     listings = payload.get("listings") if isinstance(payload, dict) else None

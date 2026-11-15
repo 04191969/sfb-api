@@ -8,6 +8,7 @@ A refused host is skipped. The next source is still tried.
 import os
 import time
 
+from .assessment import part_number_of
 from .catalog_fetch import CatalogBlocked, CatalogMissing, fetch_catalog
 from .ebay_client import EbayBrowseClient, EbayNotConfigured, build_query, listing_facts
 from .listing_sources import (
@@ -42,13 +43,100 @@ def _named(items, source_id, part_name, require_part=True):
     return kept
 
 
-def _fetch_rss(url, get, pause, limit=8):
-    text = fetch_catalog(url, timeout=12, pause=pause, get=get)
+# Gunicorn stops the worker at 90 seconds. Leave room to send the response.
+SEARCH_BUDGET = 70
+DETAIL_LIMIT = 4
+
+
+def _fetch_rss(url, get, pause, limit=8, timeout=12):
+    text = fetch_catalog(url, timeout=timeout, pause=pause, get=get)
     pause(1)
     return rss_items(text, limit=limit)
 
 
-def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None):
+def _mark_deadline(skipped):
+    if any(row.get("source") == "deadline" for row in skipped):
+        return
+    skipped.append({
+        "source": "deadline",
+        "reason": "Returned the listings already collected so the search finishes before the worker limit.",
+    })
+
+
+def _out_of_time(skipped, time_left):
+    if time_left() >= 8:
+        return False
+    _mark_deadline(skipped)
+    return True
+
+
+def _call_timeout(time_left, default=12):
+    remaining = time_left()
+    if remaining < 3:
+        return 1
+    return min(default, max(1, int(remaining) - 2))
+
+
+def _merge_facts(listing, facts):
+    """Add part numbers from the item call. A price already in hand stays."""
+    seen = {
+        (item.get("kind"), str(item.get("value") or "").casefold())
+        for item in listing.get("identifiers") or []
+    }
+    merged = list(listing.get("identifiers") or [])
+    for item in facts.get("identifiers") or []:
+        key = (item.get("kind"), str(item.get("value") or "").casefold())
+        if not item.get("value") or key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    listing["identifiers"] = merged
+    for field in (
+        "price_amount", "price_currency", "shipping_amount",
+        "shipping_currency", "item_country",
+    ):
+        if listing.get(field) in (None, "") and facts.get(field) not in (None, ""):
+            listing[field] = facts[field]
+
+
+def _fill_part_numbers(ebay, listings, time_left):
+    """Search summaries often omit the seller's part number. The item call has it."""
+    if not hasattr(ebay, "get_item"):
+        return
+    fetched = 0
+    for listing in listings:
+        if listing.get("source") != "ebay" or part_number_of(listing):
+            continue
+        if fetched >= DETAIL_LIMIT or time_left() < 30:
+            break
+        fetched += 1
+        try:
+            detail = ebay.get_item(listing.get("item_id"))
+        except Exception:
+            continue
+        if isinstance(detail, dict):
+            _merge_facts(listing, listing_facts(detail))
+
+
+def _source_reader(listings):
+    """Rows the page can show when the reader does not run or does not answer."""
+    rows = []
+    for item in listings:
+        number = part_number_of(item)
+        price = _money_label(item.get("price_amount"), item.get("price_currency"))
+        rows.append({
+            "part_name": item.get("title") or "",
+            "oem_number": number or "Not listed",
+            "price": price or "Not listed",
+            "condition": item.get("condition") or "Not listed",
+            "fitment_vehicles": [],
+            "source": item.get("source") or "",
+            "link": item.get("url") or "",
+        })
+    return rows
+
+
+def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None, now=None, budget_seconds=SEARCH_BUDGET):
     """Return listings, sources that were skipped, and the raw text a reader can use."""
     part_name = str(part_name or "").strip()
     text = search_text(part_name, make, model, year)
@@ -56,6 +144,11 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     skipped = []
     if pause is None:
         pause = time.sleep
+    clock = now or time.monotonic
+    deadline = clock() + budget_seconds
+
+    def time_left():
+        return deadline - clock()
 
     if ebay is None:
         try:
@@ -85,6 +178,7 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
                     "item_country": facts["item_country"],
                     "identifiers": facts["identifiers"],
                 })
+            _fill_part_numbers(ebay, listings, time_left)
         except Exception as exc:
             skipped.append({"source": "ebay", "reason": str(exc)})
 
@@ -107,13 +201,18 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     if not rockauto:
         skipped.append({"source": "rockauto", "reason": "RockAuto closeout RSS needs the carcode from the vehicle page."})
     else:
-        listings.extend(_safe("rockauto", rockauto, part_name, get, pause, skipped))
+        listings.extend(_safe("rockauto", rockauto, part_name, get, pause, skipped, time_left=time_left))
 
-    listings.extend(_craigslist(part_name, get, pause, skipped))
-    listings.extend(_reddit(part_name, make, model, get, pause, skipped))
-    listings.extend(_safe("rennlist", RENNLIST_RSS, part_name, get, pause, skipped))
-    listings.extend(_forums(part_name, make, get, pause, skipped))
-    listings.extend(_shared_listings(part_name, get, pause, skipped))
+    if not _out_of_time(skipped, time_left):
+        listings.extend(_craigslist(part_name, get, pause, skipped, time_left=time_left))
+    if not _out_of_time(skipped, time_left):
+        listings.extend(_reddit(part_name, make, model, get, pause, skipped, time_left=time_left))
+    if not _out_of_time(skipped, time_left):
+        listings.extend(_safe("rennlist", RENNLIST_RSS, part_name, get, pause, skipped, time_left=time_left))
+    if not _out_of_time(skipped, time_left):
+        listings.extend(_forums(part_name, make, get, pause, skipped, time_left=time_left))
+    if not _out_of_time(skipped, time_left):
+        listings.extend(_shared_listings(part_name, get, pause, skipped, time_left=time_left))
 
     found = {
         "query": text,
@@ -124,15 +223,18 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     }
     from .evidence_store import add_assessment
 
-    return add_assessment(
-        attach_reader(
+    vehicle = {"year": year, "make": make, "model": model}
+    if time_left() < 15:
+        _mark_deadline(skipped)
+        found["reader"] = keep_source_facts(found["listings"], _source_reader(found["listings"]))
+    else:
+        found = attach_reader(
             found,
-            {"year": year, "make": make, "model": model},
+            vehicle,
             read=read,
-        ),
-        evidence=evidence,
-        today=today,
-    )
+            read_timeout=min(30, max(12, int(time_left()) - 8)),
+        )
+    return add_assessment(found, evidence=evidence, today=today)
 
 
 def _money_label(amount, currency):
@@ -152,7 +254,7 @@ def _source_note(item):
     return " ".join(notes)
 
 
-def attach_reader(found, vehicle, read=None):
+def attach_reader(found, vehicle, read=None, read_timeout=30):
     """Hand the raw listings to the reader. A source price survives a blank reader price."""
     listings = found.get("listings") or []
     lines = [
@@ -169,11 +271,17 @@ def attach_reader(found, vehicle, read=None):
     raw = "\n".join(lines).strip()
     if not raw:
         return found
-    read = read or _read_listings
     try:
-        found["reader"] = keep_source_facts(listings, read(raw, vehicle))
+        parsed = (
+            _read_listings(raw, vehicle, timeout=read_timeout)
+            if read is None
+            else read(raw, vehicle)
+        )
     except Exception:
-        found["reader"] = None
+        parsed = None
+    if not isinstance(parsed, list) or not parsed:
+        parsed = _source_reader(listings)
+    found["reader"] = keep_source_facts(listings, parsed)
     return found
 
 
@@ -209,32 +317,35 @@ def keep_source_facts(listings, reader):
     return reader
 
 
-def _read_listings(raw_text, vehicle):
+def _read_listings(raw_text, vehicle, timeout=30):
     from .ai_reader import read_listings
 
-    return read_listings(raw_text, vehicle)
+    return read_listings(raw_text, vehicle, timeout=timeout)
 
 
-def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT):
+def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT, time_left=None):
     """Read a few forums from Brave, one site per query. A refusal stops the rest."""
     domains = get_forum_sites(make)[:max_sites]
-    return _site_search(part_name, domains, get, pause, skipped)[:12]
+    return _site_search(part_name, domains, get, pause, skipped, time_left=time_left)[:12]
 
 
-def _shared_listings(part_name, get, pause, skipped):
+def _shared_listings(part_name, get, pause, skipped, time_left=None):
     """Hemmings and Bring a Trailer run on every search, unless Brave already refused."""
     if any(row.get("source") == "brave" for row in skipped):
         return []
-    return _site_search(part_name, SHARED_SITES, get, pause, skipped)
+    return _site_search(part_name, SHARED_SITES, get, pause, skipped, time_left=time_left)
 
 
-def _site_search(part_name, domains, get, pause, skipped):
+def _site_search(part_name, domains, get, pause, skipped, time_left=None):
+    time_left = time_left or (lambda: 10**9)
     kept = []
     for domain in domains:
+        if _out_of_time(skipped, time_left):
+            break
         try:
             page = fetch_catalog(
                 brave_forum_url(part_name, domain),
-                timeout=12,
+                timeout=_call_timeout(time_left),
                 pause=pause,
                 get=get,
                 retry_rate_limit=False,
@@ -255,14 +366,23 @@ def _site_search(part_name, domains, get, pause, skipped):
     return kept
 
 
-def _craigslist(part_name, get, pause, skipped, max_cities=5):
+def _craigslist(part_name, get, pause, skipped, max_cities=5, time_left=None):
     """Read a few city feeds. A refused city is skipped; the next city is still tried."""
+    time_left = time_left or (lambda: 10**9)
     kept = []
     blocked = None
     for city in CL_CITIES[:max_cities]:
+        if _out_of_time(skipped, time_left):
+            break
         try:
             for item in _named(
-                _fetch_rss(craigslist_city_url(city, part_name), get, pause, limit=10),
+                _fetch_rss(
+                    craigslist_city_url(city, part_name),
+                    get,
+                    pause,
+                    limit=10,
+                    timeout=_call_timeout(time_left),
+                ),
                 "craigslist",
                 part_name,
             ):
@@ -279,15 +399,18 @@ def _craigslist(part_name, get, pause, skipped, max_cities=5):
     return kept[:15]
 
 
-def _reddit(part_name, make, model, get, pause, skipped, max_subs=15):
+def _reddit(part_name, make, model, get, pause, skipped, max_subs=15, time_left=None):
     """Read the make's subs from Reddit's JSON search. A refusal stops the rest of Reddit."""
+    time_left = time_left or (lambda: 10**9)
     kept = []
     blocked = None
     for subreddit in get_subs_for_vehicle(make, model)[:max_subs]:
+        if _out_of_time(skipped, time_left):
+            break
         try:
             payload = fetch_catalog(
                 reddit_search_url(subreddit, part_name),
-                timeout=10,
+                timeout=_call_timeout(time_left, default=10),
                 pause=pause,
                 get=get,
                 headers={"Accept": "application/json"},
@@ -306,9 +429,16 @@ def _reddit(part_name, make, model, get, pause, skipped, max_subs=15):
     return kept[:15]
 
 
-def _safe(source_id, url, part_name, get, pause, skipped):
+def _safe(source_id, url, part_name, get, pause, skipped, time_left=None):
+    time_left = time_left or (lambda: 10**9)
+    if _out_of_time(skipped, time_left):
+        return []
     try:
-        return _named(_fetch_rss(url, get, pause), source_id, part_name)
+        return _named(
+            _fetch_rss(url, get, pause, timeout=_call_timeout(time_left)),
+            source_id,
+            part_name,
+        )
     except (CatalogBlocked, CatalogMissing) as exc:
         skipped.append({"source": source_id, "reason": str(exc)})
         return []
