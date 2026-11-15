@@ -46,6 +46,8 @@ from .catalog_shape import (
     subscription_is_paid,
 )
 from .growth import AmbiguousVehicle, grow_vehicle
+from .listing_find import find_listings
+from .listing_sources import accessible_sources, unavailable_sources
 from .views import _server_error
 
 
@@ -567,6 +569,35 @@ def _import_rows(value):
     if isinstance(value, str) and value.strip():
         return list(csv.DictReader(io.StringIO(value)))
     return None
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def listing_sources(request):
+    """Where a parts search can look, and the two sites it will not call."""
+    return Response({
+        "sources": accessible_sources(),
+        "unavailable": unavailable_sources(),
+    })
+
+
+@api_view(["POST"])
+def listing_find(request):
+    """Read listing sites for one part. Results are not saved as catalog fits."""
+    part_name = request.data.get("part_name") or request.data.get("q") or ""
+    if not str(part_name).strip():
+        return Response({"error": "part_name is required"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        found = find_listings(
+            part_name,
+            make=request.data.get("make") or "",
+            model=request.data.get("model") or "",
+            year=request.data.get("year") or "",
+            carcode=request.data.get("carcode"),
+        )
+    except Exception as exc:
+        return _server_error(exc)
+    return Response(found)
 
 
 @api_view(["POST"])

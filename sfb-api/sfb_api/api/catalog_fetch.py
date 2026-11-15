@@ -31,15 +31,18 @@ class CatalogMissing(Exception):
         super().__init__(f"{status} {url}")
 
 
-def fetch_catalog(url, timeout=20, pause=None, get=None):
+def fetch_catalog(url, timeout=20, pause=None, get=None, headers=None):
     pause = pause or time.sleep
     get = get or httpx.get
+    sent = {"User-Agent": USER_AGENT, "Accept": "text/html"}
+    if headers:
+        sent.update(headers)
     last_error = None
     for attempt in range(2):
         try:
             response = get(
                 url,
-                headers={"User-Agent": USER_AGENT, "Accept": "text/html"},
+                headers=sent,
                 timeout=timeout,
                 follow_redirects=True,
             )
