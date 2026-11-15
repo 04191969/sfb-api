@@ -461,6 +461,8 @@ def _site_search(part_name, domains, get, pause, skipped, time_left=None):
                 continue
             item["source"] = forum_source_id(domain)
             item["site"] = domain
+            if item.get("sale_status") != "sold" or not item.get("sold_at"):
+                item["sale_status"] = "asking"
             kept.append(item)
     return kept
 
