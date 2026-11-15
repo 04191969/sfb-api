@@ -384,4 +384,28 @@ def add_assessment(found, evidence=None, today=None, confirm_fitment=None):
             source = by_url.get(row.get("link") or row.get("url") or "")
             if source and source.get("assessment"):
                 row["assessment"] = source["assessment"]
+    found["offer_outcome"] = offer_outcome(listings)
     return found
+
+
+def offer_outcome(listings):
+    """Separate a search with no matching offer from a match that lacks a comparison."""
+    qualifying = [
+        row for row in listings or []
+        if (row.get("request_match") or {}).get("status") == "qualifying"
+    ]
+    if not qualifying:
+        return {"code": "no_matching_offer", "message": "No matching offer found."}
+    statuses = {
+        ((row.get("assessment") or {}).get("market") or {}).get("status")
+        for row in qualifying
+    }
+    if statuses & {"limited", "median"}:
+        return {"code": "compared", "message": ""}
+    return {
+        "code": "needs_comparison",
+        "message": (
+            "Needs data: a matching offer was found, "
+            "but there is not enough comparison evidence."
+        ),
+    }

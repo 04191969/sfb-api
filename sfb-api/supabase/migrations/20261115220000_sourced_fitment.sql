@@ -101,12 +101,24 @@ insert into public.sourced_fitment_source (part_number, source_url, checked_on, 
     'https://teile.com/pdf/teilecom_en_PCCB-fixed-calliper-C2-C2S-C4-C4S-Turbo-L_9P1615123K.pdf',
     '2026-11-15',
     '9P1615123K is the PCCB left front caliper for the 991.1 Turbo 2014-2016.'
+),
+(
+    '9P1615123L',
+    'https://www.fcpeuro.com/products/porsche-disc-brake-caliper-front-left-911-por-99135142713',
+    '2026-11-15',
+    'Lists 99135142714, 99135142713, and 99135142712 as OE numbers. Does not state which number replaced which.'
 )
 on conflict on constraint sourced_fitment_source_url do nothing;
 
 insert into public.part_number_relation (
     part_number, related_number, relation, replacement_confirmed, source_url, checked_on, note
 ) values
+(
+    '9P1615123L', '99135142714', 'supplier_reported_oe_number', false,
+    'https://www.fcpeuro.com/products/porsche-disc-brake-caliper-front-left-911-por-99135142713',
+    '2026-11-15',
+    'FCP Euro lists this as an OE number on the 9P1615123L page. The replacement direction is not stated.'
+),
 (
     '9P1615123L', '99135142713', 'supplier_reported_previous', false,
     'https://teile.com/en/porsche-parts-shop/model-911-991/27/Wheels-brakes/602A-Disc-brake-front-axle/30/602-00-Disc-brake-front/Brake-calliper-Turbo-L/67514',

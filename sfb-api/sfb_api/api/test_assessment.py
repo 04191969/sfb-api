@@ -426,11 +426,10 @@ class AssessmentTests(unittest.TestCase):
         previous = previous_numbers("9P1615123L")
         self.assertEqual(
             [item["number"] for item in previous],
-            ["99135142713", "99135142712"],
+            ["99135142714", "99135142713", "99135142712"],
         )
-        self.assertTrue(all(item["relation"] == "supplier_reported_previous" for item in previous))
         self.assertTrue(all(item["replacement_confirmed"] is False for item in previous))
-        for number in ("99135142713", "99135142712"):
+        for number in ("99135142714", "99135142713", "99135142712"):
             self.assertNotIn(number, oem_numbers_for_request(request))
         other = dict(request)
         other["variant"] = "Turbo S"
@@ -465,6 +464,12 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(match["fitment"], "catalog")
         self.assertTrue(found["listings"][0]["identifiers"][0]["verified"])
         self.assertEqual(found["listings"][0]["assessment"]["market"]["status"], "needs_data")
+        self.assertEqual(found["offer_outcome"]["code"], "needs_comparison")
+        self.assertIn(
+            "not enough comparison evidence",
+            found["listings"][0]["assessment"]["summary"],
+        )
+        self.assertNotIn("No matching offer", found["listings"][0]["assessment"]["summary"])
 
         old_number = dict(claim)
         old_number["value"] = "99135142713"
@@ -489,6 +494,8 @@ class AssessmentTests(unittest.TestCase):
             previous_offer["listings"][0]["assessment"]["market"]["status"],
             "limited",
         )
+        self.assertEqual(previous_offer["offer_outcome"]["code"], "no_matching_offer")
+        self.assertEqual(previous_offer["offer_outcome"]["message"], "No matching offer found.")
 
     def test_a_bolt_with_the_same_number_does_not_set_the_caliper_price(self):
         caliper = {

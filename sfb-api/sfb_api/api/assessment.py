@@ -443,7 +443,10 @@ def _summary(market, costs, note=""):
     elif not part_number_of({"part_number": market.get("part_number")}):
         identity = "Needs data: this listing has no manufacturer part number, so no comparison was made."
     elif market["status"] == "needs_data":
-        identity = "Needs data: no recent asking comparison for this part on the same price basis."
+        identity = (
+            "Needs data: a matching offer was found, "
+            "but there is not enough comparison evidence."
+        )
     elif market["status"] == "limited":
         identity = (
             f"Limited evidence: one asking comparison at {market['reference_price']} {market.get('currency') or ''}. "
