@@ -12,8 +12,9 @@ from sfb_api.api.listing_find import find_listings
 from sfb_api.api.listing_sources import (
     CL_CITIES,
     accessible_sources,
-    bing_site_url,
+    bing_forum_url,
     craigslist_city_url,
+    get_forum_sites,
     get_subs_for_vehicle,
     is_for_sale,
     keep_listing,
@@ -29,7 +30,7 @@ FEED = """<?xml version="1.0"?>
 <rss><channel>
 <item>
   <title>996 IMS bearing for sale</title>
-  <link>https://www.thesamba.com/vw/classifieds/996</link>
+  <link>https://www.pelicanparts.com/porsche/996</link>
   <description>Used bearing, local pickup.</description>
 </item>
 </channel></rss>
@@ -75,9 +76,23 @@ class SourceListTests(unittest.TestCase):
         self.assertFalse(is_for_sale("How do I replace an IMS bearing?"))
         self.assertIsNone(rockauto_rss_url(""))
         self.assertIn("carcode=1190933", rockauto_rss_url("1190933"))
-        query = bing_site_url("IMS bearing")
-        self.assertIn("site%3Athesamba.com", query)
-        self.assertIn("site%3Arow52.com", query)
+        porsche_sites = get_forum_sites("Porsche")
+        self.assertEqual(porsche_sites[0], "rennlist.com")
+        self.assertIn("hemmings.com", porsche_sites)
+        self.assertNotIn("bimmerforums.com", porsche_sites)
+        searched = porsche_sites[:8]
+        self.assertIn("pelicanparts.com", searched)
+        self.assertNotIn("car-part.com", searched)
+        self.assertIn("thesamba.com", get_forum_sites("Volkswagen"))
+        self.assertIn("ferrarichat.com", get_forum_sites("Ferrari"))
+        self.assertIn("corvetteforums.com", get_forum_sites("Cadillac"))
+        self.assertIn("AlfaRomeo", get_subs_for_vehicle("Alfa Romeo"))
+        query = bing_forum_url("brake caliper", ["r3vlimited.com"], sale=True)
+        self.assertIn("site%3Ar3vlimited.com", query)
+        self.assertIn("%22for+sale%22", query)
+        self.assertNotIn("site%3Ar3vlimited.com", bing_forum_url("brake caliper", ["miata.net"]))
+        plain = bing_forum_url("brake caliper", ["r3vlimited.com"], sale=False)
+        self.assertNotIn("%22for+sale%22", plain)
         self.assertEqual(source_for_url("https://www.thesamba.com/vw/1"), "thesamba")
 
     def test_rss_keeps_a_part_mention(self):
@@ -120,9 +135,10 @@ class FindTests(unittest.TestCase):
         reasons = {row["source"]: row["reason"] for row in found["skipped"]}
         self.assertIn("craigslist", reasons)
         self.assertIn("rockauto", reasons)
-        self.assertTrue(any(row["source"] == "thesamba" for row in found["listings"]))
+        self.assertTrue(any(row["source"] == "pelicanparts" for row in found["listings"]))
         self.assertTrue(any(row["source"] == "rennlist" for row in found["listings"]))
-        self.assertIn("thesamba", seen["raw"])
+        self.assertIn("pelicanparts.com", seen["raw"])
+        self.assertNotIn("bimmerforums.com", seen["raw"])
         self.assertEqual(seen["make"], "Porsche")
         self.assertEqual(found["reader"][0]["part_name"], "IMS bearing")
 

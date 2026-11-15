@@ -14,9 +14,13 @@ from .listing_sources import (
     CL_CITIES,
     OLD_CARS_LIVE,
     RENNLIST_RSS,
+    FORUM_LIMIT,
     accessible_sources,
-    bing_site_url,
+    bing_forum_url,
     craigslist_city_url,
+    domain_for_url,
+    forum_source_id,
+    get_forum_sites,
     get_subs_for_vehicle,
     keep_listing,
     reddit_posts,
@@ -24,7 +28,6 @@ from .listing_sources import (
     rockauto_rss_url,
     rss_items,
     search_text,
-    source_for_url,
 )
 
 
@@ -100,16 +103,7 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     listings.extend(_craigslist(part_name, get, pause, skipped))
     listings.extend(_reddit(part_name, make, model, get, pause, skipped))
     listings.extend(_safe("rennlist", RENNLIST_RSS, part_name, get, pause, skipped))
-
-    try:
-        for item in _fetch_rss(bing_site_url(text), get, pause):
-            source = source_for_url(item.get("url"))
-            if not source:
-                continue
-            item["source"] = source
-            listings.append(item)
-    except (CatalogBlocked, CatalogMissing) as exc:
-        skipped.append({"source": "bing", "reason": str(exc)})
+    listings.extend(_forums(part_name, make, get, pause, skipped))
 
     found = {
         "query": text,
@@ -130,7 +124,7 @@ def attach_reader(found, vehicle, read=None):
     lines = [
         " | ".join((
             item.get("source") or "",
-            item.get("city") or item.get("subreddit") or "",
+            item.get("city") or item.get("subreddit") or item.get("site") or "",
             item.get("title") or "",
             item.get("url") or "",
             item.get("snippet") or "",
@@ -149,9 +143,47 @@ def attach_reader(found, vehicle, read=None):
 
 
 def _read_listings(raw_text, vehicle):
-    from .ai_reader import read_catalog
+    from .ai_reader import read_listings
 
-    return read_catalog(raw_text, "listing-search", vehicle)
+    return read_listings(raw_text, vehicle)
+
+
+def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT):
+    """Search the make's forums through Bing. A miss retries once without the sale phrase."""
+    domains = get_forum_sites(make)[:max_sites]
+    first, blocked = _forum_query(part_name, domains, True, get, pause)
+    if blocked is not None:
+        skipped.append({"source": "bing", "reason": str(blocked)})
+        return []
+    found = {item.get("site") for item in first}
+    missing = [domain for domain in domains if domain not in found]
+    second = []
+    if missing:
+        second, blocked = _forum_query(part_name, missing, False, get, pause)
+        if blocked is not None:
+            skipped.append({"source": "bing", "reason": str(blocked)})
+    return (first + second)[:15]
+
+
+def _forum_query(part_name, domains, sale, get, pause):
+    if not domains:
+        return [], None
+    try:
+        items = _fetch_rss(bing_forum_url(part_name, domains, sale=sale), get, pause, limit=20)
+    except CatalogBlocked as exc:
+        return [], exc
+    except CatalogMissing:
+        return [], None
+    kept = []
+    allowed = set(domains)
+    for item in items:
+        domain = domain_for_url(item.get("url"))
+        if domain not in allowed or not keep_listing(item, part_name):
+            continue
+        item["source"] = forum_source_id(domain)
+        item["site"] = domain
+        kept.append(item)
+    return kept, None
 
 
 def _craigslist(part_name, get, pause, skipped, max_cities=5):

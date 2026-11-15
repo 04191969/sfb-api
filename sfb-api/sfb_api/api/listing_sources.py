@@ -16,22 +16,6 @@ RENNLIST_RSS = "https://rennlist.com/forums/external.php?type=rss2"
 ROCKAUTO_RSS = "https://www.rockauto.com/RSS/vehiclefeeds.php"
 OLD_CARS_LIVE = "https://api.oldcarsdata.com/auctions/live"
 
-# domain, id, name, what that site is for
-SITE_SEARCH = (
-    ("thesamba.com", "thesamba", "TheSamba.com", "VW and Porsche"),
-    ("pelicanparts.com", "pelicanparts", "PelicanParts.com", "Porsche, BMW, and Mercedes"),
-    ("bimmerforums.com", "bimmerforums", "BimmerForums.com", "BMW"),
-    ("ferrarichat.com", "ferrarichat", "FerrariChat.com", "Ferrari"),
-    ("jaglovers.com", "jaglovers", "JagLovers.com", "Jaguar"),
-    ("landroverforums.com", "landroverforums", "LandRoverForums.com", "Land Rover"),
-    ("hemmings.com", "hemmings", "Hemmings.com", "Classic cars"),
-    ("bringatrailer.com", "bringatrailer", "BringATrailer.com", "Collector auctions"),
-    ("forabodiesonly.com", "forabodiesonly", "ForABodiesOnly.com", "Mopar A-body"),
-    ("grassrootsmotorsports.com", "grassrootsmotorsports", "GrassrootsMotorsports.com", "Enthusiast cars"),
-    ("car-part.com", "carpart", "Car-Part.com", "Used and salvage"),
-    ("row52.com", "row52", "Row52.com", "Self-service yards"),
-)
-
 UNAVAILABLE = (
     {
         "id": "facebook",
@@ -64,10 +48,18 @@ def accessible_sources():
         {"id": "reddit", "name": "Reddit", "method": "json", "focus": "For-sale posts in make subs"},
         {"id": "rennlist", "name": "Rennlist.com", "method": "rss", "focus": "Porsche parts marketplace"},
     ]
-    rows.extend(
-        {"id": source_id, "name": name, "method": "site-search", "focus": focus}
-        for _domain, source_id, name, focus in SITE_SEARCH
-    )
+    seen = {row["id"] for row in rows}
+    for domain in forum_domains():
+        source_id = forum_source_id(domain)
+        if source_id in seen:
+            continue
+        rows.append({
+            "id": source_id,
+            "name": domain,
+            "method": "site-search",
+            "focus": "Forum listings for the matching make",
+        })
+        seen.add(source_id)
     return rows
 
 
@@ -138,6 +130,7 @@ REDDIT_SUBS = {
     "mopar": ["Dodge", "Challenger", "Charger", "Ram_Trucks", "Mopar"],
     "british": ["LandRover", "Defender", "Jaguar"],
     "swedish": ["Volvo", "Saab"],
+    "italian": ["Ferrari", "AlfaRomeo", "Fiat"],
     "classic": [
         "projectcar", "classiccars", "CollectorCarFeed", "vintagecars",
         "BarrettJackson",
@@ -150,11 +143,17 @@ MAKE_CATEGORIES = {
     "bmw": "bmw",
     "mercedes": "mercedes",
     "ford": "ford",
+    "lincoln": "ford",
     "chevrolet": "gm",
     "chevy": "gm",
     "gmc": "gm",
+    "buick": "gm",
+    "cadillac": "gm",
+    "oldsmobile": "gm",
+    "pontiac": "gm",
     "toyota": "toyota",
     "lexus": "toyota",
+    "scion": "toyota",
     "honda": "honda",
     "acura": "honda",
     "subaru": "subaru",
@@ -175,7 +174,74 @@ MAKE_CATEGORIES = {
     "jaguar": "british",
     "volvo": "swedish",
     "saab": "swedish",
+    "ferrari": "italian",
+    "alfa romeo": "italian",
+    "fiat": "italian",
+    "maserati": "italian",
+    "lamborghini": "italian",
 }
+
+FORUM_SITES = {
+    "porsche": [
+        "rennlist.com", "pelicanparts.com", "planet-9.com", "flatsixes.com",
+        "early911sregistry.org", "autokennel.com",
+    ],
+    "bmw": [
+        "bimmerforums.com", "bimmerpost.com", "r3vlimited.com", "bimmerfest.com",
+        "mye28.com", "e46fanatics.com",
+    ],
+    "mercedes": ["mbworld.org", "benzworld.org", "peachparts.com"],
+    "ford": [
+        "mustangforums.com", "vintage-mustang.com", "stangnet.com",
+        "fordtruckenthusiasts.com", "broncocorral.com", "full-size-bronco.com",
+        "blueovalforums.com",
+    ],
+    "gm": [
+        "corvetteforums.com", "corvetteforum.com", "camaroz28.com", "gbodyforum.com",
+        "nastyz28.com", "67-72chevytrucks.com", "forbodiesonly.com", "trifive.com",
+        "forabodiesonly.com",
+    ],
+    "toyota": [
+        "toyotanation.com", "toyota-4runner.org", "tacomaworld.com", "ih8mud.com",
+        "supramkiv.com", "mr2oc.com", "clublexus.com",
+    ],
+    "honda": [
+        "hondatech.com", "s2ki.com", "acurazine.com", "honda-acura.net",
+        "clubintegra.com",
+    ],
+    "subaru": ["nasioc.com", "subaruoutback.org", "ft86club.com", "subaruforester.org"],
+    "mazda": [
+        "clubroadster.net", "miata.net", "rx7club.com", "rx8club.com",
+        "mazda3revolution.com",
+    ],
+    "nissan": [
+        "nicoclub.com", "the370z.com", "my350z.com", "zilvia.net",
+        "ratsun.net", "classiczcar.com",
+    ],
+    "vw_audi": [
+        "thesamba.com", "vwvortex.com", "audizine.com", "audiworld.com", "tdiclub.com",
+    ],
+    "jeep": ["jeepforum.com", "wranglerforum.com", "naxja.org", "comancheclub.com"],
+    "mopar": [
+        "forbbodiesonly.com", "forebodiesonly.com", "dodgetalk.com",
+        "turbododge.com", "challengertalk.com", "ramforumz.com",
+    ],
+    "british": [
+        "landroverforums.com", "jaglovers.com", "defender2.net",
+        "discoveryowners.com", "jaguarforums.com",
+    ],
+    "swedish": ["turbobricks.com", "swedespeed.com", "saabcentral.com", "volvoforums.com"],
+    "italian": [
+        "ferrarichat.com", "ferrarilife.com", "alfabb.com", "fiatforum.com",
+        "maseratilife.com",
+    ],
+    "classic": [
+        "hemmings.com", "bringatrailer.com", "car-part.com", "row52.com",
+        "grassrootsmotorsports.com", "stovebolt.com", "hagerty.com",
+    ],
+}
+
+FORUM_LIMIT = 8
 
 _SALE_TITLE = re.compile(r"\[(?:for sale|fs|wts)\]|\bfor sale\b|\bwts\b|(?:^|\s)fs(?:\s|:|-)", re.I)
 
@@ -186,10 +252,7 @@ def get_subs_for_vehicle(make, model=""):
     model is part of the vehicle call. The published map selects by make.
     """
     subs = list(REDDIT_SUBS["general_parts"])
-    key = " ".join(str(make or "").casefold().replace("-", " ").split())
-    if key.startswith("mercedes"):
-        key = "mercedes"
-    category = MAKE_CATEGORIES.get(key)
+    category = MAKE_CATEGORIES.get(_make_key(make))
     if category:
         subs.extend(REDDIT_SUBS[category])
     subs.extend(REDDIT_SUBS["classic"])
@@ -239,18 +302,62 @@ def reddit_posts(payload_text, subreddit):
     return items
 
 
-def bing_site_url(text):
-    sites = " OR ".join(f"site:{domain}" for domain, *_rest in SITE_SEARCH)
-    return BING_RSS + "?" + urlencode({"format": "rss", "q": f"({sites}) {text}"})
+def _make_key(make):
+    key = " ".join(str(make or "").casefold().replace("-", " ").split())
+    if key.startswith("mercedes"):
+        key = "mercedes"
+    return key
 
 
-def source_for_url(url):
+def forum_source_id(domain):
+    return domain.split(".")[0].replace("-", "")
+
+
+def forum_domains():
+    seen = []
+    for domains in FORUM_SITES.values():
+        for domain in domains:
+            if domain not in seen:
+                seen.append(domain)
+    return seen
+
+
+def get_forum_sites(make):
+    """The make's forums, then the shared classic sites. A search reads only the first few."""
+    sites = []
+    category = MAKE_CATEGORIES.get(_make_key(make))
+    if category and category in FORUM_SITES:
+        sites.extend(FORUM_SITES[category])
+    for domain in FORUM_SITES["classic"]:
+        if domain not in sites:
+            sites.append(domain)
+    return sites
+
+
+def bing_forum_url(part_name, domains, sale=True):
+    """One public search for these forums. The forum sites themselves are not requested."""
+    sites = " OR ".join(f"site:{domain}" for domain in domains)
+    words = f'"for sale" {part_name}' if sale else str(part_name)
+    return BING_RSS + "?" + urlencode({"format": "rss", "q": f"({sites}) {words}"})
+
+
+def domain_for_url(url):
     host = (urlparse(url or "").hostname or "").casefold()
     if host.startswith("www."):
         host = host[4:]
-    for domain, source_id, _name, _focus in SITE_SEARCH:
+    for domain in forum_domains():
         if host == domain or host.endswith("." + domain):
-            return source_id
+            return domain
+    return ""
+
+
+def source_for_url(url):
+    domain = domain_for_url(url)
+    if domain:
+        return forum_source_id(domain)
+    host = (urlparse(url or "").hostname or "").casefold()
+    if host.startswith("www."):
+        host = host[4:]
     if "craigslist.org" in host:
         return "craigslist"
     if host.endswith("reddit.com"):
