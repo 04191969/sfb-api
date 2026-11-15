@@ -13,11 +13,17 @@ urlpatterns = [
     path('api/parts/search', views_catalog.part_search, name='part-search'),
     path('api/parts/search/', views_catalog.part_search, name='part-search-slash'),
     path('api/fitment/', views_catalog.fitment_for_part, name='fitment-for-part'),
+    path('api/fitment/confirm/', views_catalog.fitment_confirm, name='fitment-confirm'),
     path('api/fitment/cross-car', views_catalog.cross_car, name='fitment-cross-car'),
     path('api/fitment/cross-car/', views_catalog.cross_car, name='fitment-cross-car-slash'),
+    path('api/watch/list/', views_catalog.watch_list, name='watch-list'),
+    path('api/watch/list', views_catalog.watch_list, name='watch-list-noslash'),
+    path('api/watch/<str:watch_id>/results/', views_catalog.watch_results, name='watch-results'),
+    path('api/watch/<str:watch_id>/', views_catalog.watch_stop, name='watch-stop'),
     path('api/watch/', views_catalog.watch, name='watch'),
     path('api/watch', views_catalog.watch, name='watch-noslash'),
     path('api/catalog/grow/', views_catalog.catalog_grow, name='catalog-grow'),
+    path('api/growth/run/', views_catalog.growth_run, name='growth-run'),
 
     # Billing. The webhook is public and checks the Stripe signature.
     path('api/billing/subscription/', views_catalog.billing_subscription, name='billing-subscription'),

@@ -7,3 +7,5 @@ supabase==2.34.1
 python-dotenv==1.0.1
 whitenoise==6.8.2
 stripe==11.6.0
+httpx==0.28.1
+beautifulsoup4==4.12.3

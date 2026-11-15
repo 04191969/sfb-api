@@ -82,3 +82,9 @@ alter table public.parts enable row level security;
 alter table public.fitment enable row level security;
 alter table public.watches enable row level security;
 alter table public.subscriptions enable row level security;
+
+grant select, insert, update, delete on public.vehicles to service_role;
+grant select, insert, update, delete on public.parts to service_role;
+grant select, insert, update, delete on public.fitment to service_role;
+grant select, insert, update, delete on public.watches to service_role;
+grant select, insert, update, delete on public.subscriptions to service_role;

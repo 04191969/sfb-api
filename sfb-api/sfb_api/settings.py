@@ -63,6 +63,8 @@ SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')  # service_role key
 # OpenAI
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+OPENAI_READER_MODEL = os.environ.get('OPENAI_READER_MODEL', 'gpt-4o-mini')
+OPENAI_MATCHER_MODEL = os.environ.get('OPENAI_MATCHER_MODEL', 'gpt-4o')
 
 # Shared secret between Lovable and this API. Unset means the check is off.
 # GET /api/vehicles/ stays public either way. Health stays public.
@@ -83,6 +85,21 @@ STRIPE_CANCEL_URL = os.environ.get(
     'STRIPE_CANCEL_URL',
     'https://bright-web-workshop-37.lovable.app/pricing?checkout=cancel',
 )
+
+# Console prints alerts in the Railway logs. Set EMAIL_HOST to send them.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend' if os.environ.get('EMAIL_HOST')
+    else 'django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+_email_port = os.environ.get('EMAIL_PORT') or ('465' if os.environ.get('EMAIL_USE_SSL', '').lower() == 'true' else '587')
+EMAIL_PORT = int(_email_port)
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False').lower() == 'true'
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False').lower() == 'true'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'alerts@sfb.app')
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'

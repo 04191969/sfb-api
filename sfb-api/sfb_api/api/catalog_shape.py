@@ -2,6 +2,8 @@
 
 import re
 
+from .catalog_route import confidence_label, visible_to_buyers
+
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -116,8 +118,10 @@ def fitment_vehicles(fitment_rows, vehicles_by_id, exclude_vehicle_id=None):
         vehicle_id = str(vehicle.get("id") or row.get("vehicle_id") or "")
         if not vehicle_id or vehicle_id == excluded or vehicle_id in seen:
             continue
+        if not visible_to_buyers(row):
+            continue
         seen.add(vehicle_id)
-        vehicles.append({
+        entry = {
             "id": vehicle.get("id") or row.get("vehicle_id"),
             "year": vehicle.get("year"),
             "make": vehicle.get("make"),
@@ -127,7 +131,16 @@ def fitment_vehicles(fitment_rows, vehicles_by_id, exclude_vehicle_id=None):
             "body_style": vehicle.get("body_style"),
             "source": row.get("source"),
             "confirmed_at": row.get("confirmed_at"),
-        })
+        }
+        label = confidence_label(row.get("confidence"))
+        if label:
+            entry["confidence"] = float(row["confidence"])
+            entry["confidence_label"] = label
+        if row.get("qualifier"):
+            entry["qualifier"] = row["qualifier"]
+        if row.get("match_method"):
+            entry["match_method"] = row["match_method"]
+        vehicles.append(entry)
     vehicles.sort(key=lambda item: (
         item.get("year") or 0,
         (item.get("make") or "").casefold(),
