@@ -115,10 +115,16 @@ def _missing_fitment_column(exc):
 
 
 def oem_numbers_for_request(part_name, make, model, year, limit=3, request=None):
-    """Manufacturer numbers the catalog fits to this vehicle and this exact part."""
-    from .request_match import _conflict_word, _head, tokens
+    """Manufacturer numbers the catalog fits to this vehicle and this exact part.
+
+    Caliper numbers are not chosen from generation text or the part name.
+    Those requests use structured fitment records.
+    """
+    from .request_match import _conflict_word, _head, is_caliper_request, tokens
 
     request = request or {}
+    if is_caliper_request(part_name):
+        return []
     year_number = int(str(year).strip())
     head = _head(part_name)
     variant = str(request.get("variant") or "").strip().casefold()

@@ -787,6 +787,36 @@ class FindTests(unittest.TestCase):
         self.assertIn("Seller claims this fits 2015 Porsche 911.", row["assessment"]["summary"])
         self.assertNotEqual(row["assessment"]["market"]["status"], "limited")
 
+    def test_a_specific_caliper_search_asks_for_the_sourced_part_number(self):
+        calls = []
+
+        class Ebay:
+            def search_parts(self, query, limit=10, sort=None):
+                calls.append((query, sort))
+                return []
+
+        find_listings(
+            "brake caliper",
+            make="Porsche",
+            model="911",
+            year="2015",
+            variant="Turbo",
+            brake_configuration="iron",
+            axle="front",
+            side="left",
+            ebay=Ebay(),
+            old_cars=lambda _text: [],
+            get=lambda *_args, **_kwargs: type("Response", (), {"status_code": 200, "text": "", "headers": {}})(),
+            pause=lambda _seconds: None,
+            read=lambda _raw, _vehicle: None,
+            confirm_fitment=lambda *_args: False,
+        )
+        queries = [query for query, _sort in calls]
+        self.assertIn("9P1615123L Porsche", queries)
+        self.assertNotIn("99135142713 Porsche", queries)
+        self.assertNotIn("99135142712 Porsche", queries)
+        self.assertIn('"brake caliper" 2015 Porsche 911', queries)
+
     def test_a_seller_sku_stays_out_of_the_manufacturer_number(self):
         facts = listing_facts({
             "itemId": "v1|3|0",

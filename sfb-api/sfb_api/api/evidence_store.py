@@ -35,6 +35,9 @@ def evidence_row(listing, observed_at=None):
     status = listing.get("sale_status") or listing.get("status") or "asking"
     if status not in ("asking", "sold"):
         status = "asking"
+    # A title that says "sale" is still an asking offer. Sold needs a sale date.
+    if status == "sold" and not _iso(listing.get("sold_at")):
+        status = "asking"
     return {
         "source": source,
         "listing_id": listing_id,
@@ -202,17 +205,16 @@ def _mark_verified(listing, number):
             item["verified"] = True
 
 
-def _catalog_vehicle_matches(row, variant):
-    haystack = " ".join(
-        str(row.get(field) or "")
-        for field in ("generation", "engine", "body_style", "model")
-    ).casefold()
-    return bool(variant) and variant in haystack
-
-
 def catalog_confirms(part_number, vehicle):
-    """True when catalog manufacturer data fits this number to the requested vehicle."""
+    """True when catalog manufacturer data fits this number to the requested vehicle.
+
+    A caliper matches structured fitment fields. Words in a part name, or a
+    variant written into the vehicle generation, do not.
+    """
     from django.conf import settings
+
+    from .request_match import is_caliper_request, request_is_specific
+    from .sourced_fitment import confirms as sourced_confirms
 
     number = str(part_number or "").strip()
     vehicle = vehicle or {}
@@ -221,16 +223,17 @@ def catalog_confirms(part_number, vehicle):
     model = str(vehicle.get("model") or "").strip()
     if not number or not year.isdigit() or not make or not model:
         return False
+    requested = vehicle.get("part_name") or ""
+    if is_caliper_request(requested):
+        if not request_is_specific(vehicle):
+            return False
+        return sourced_confirms(number, vehicle)
     if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
         return False
     try:
         from .catalog import fitment_for_parts, part_by_oem, search_vehicles
-        from .request_match import _conflict_word, _head, is_caliper_request, request_is_specific, tokens
+        from .request_match import _conflict_word, _head, tokens
 
-        requested = vehicle.get("part_name") or ""
-        caliper = is_caliper_request(requested)
-        if caliper and not request_is_specific(vehicle):
-            return False
         part = part_by_oem(number)
         if not part:
             return False
@@ -241,25 +244,11 @@ def catalog_confirms(part_number, vehicle):
         if head and head not in set(tokens(catalog_name)):
             return False
         vehicles = search_vehicles(make, model, int(year))
-        if caliper:
-            variant = str(vehicle.get("variant") or "").strip().casefold()
-            vehicles = [row for row in vehicles if _catalog_vehicle_matches(row, variant)]
         vehicle_ids = {row.get("id") for row in vehicles}
         if not vehicle_ids:
             return False
-        wanted = []
-        if caliper:
-            wanted = [
-                str(vehicle.get(key) or "").strip().casefold()
-                for key in ("brake_configuration", "axle", "side")
-            ]
         for row in fitment_for_parts([part["id"]]):
-            if row.get("vehicle_id") not in vehicle_ids:
-                continue
-            if not wanted:
-                return True
-            haystack = f"{catalog_name} {row.get('qualifier') or ''}".casefold()
-            if all(piece in haystack for piece in wanted):
+            if row.get("vehicle_id") in vehicle_ids:
                 return True
         return False
     except Exception:

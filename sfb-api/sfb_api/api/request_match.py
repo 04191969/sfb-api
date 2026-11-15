@@ -47,11 +47,19 @@ def _head(requested):
     return words[-1] if words else ""
 
 
-def _listing_text(listing):
+def _source_text(listing):
+    """The listing's own title and snippet. A reader's label is not this text."""
     return " ".join(
         str(listing.get(field) or "")
-        for field in ("title", "offered_name", "part_name", "snippet")
+        for field in ("title", "part_name", "snippet")
     )
+
+
+def _listing_text(listing):
+    return " ".join((
+        _source_text(listing),
+        str(listing.get("offered_name") or ""),
+    ))
 
 
 REQUEST_FIELDS = (
@@ -113,8 +121,8 @@ def _and_list(items):
 
 
 def _repair_kit_word(words, request_words):
-    """Plural repair kits are the same conflict as a repair kit."""
-    if "repair" not in words:
+    """A repair kit or a rebuild kit is a component, including the plural."""
+    if "repair" not in words and "rebuild" not in words:
         return ""
     if "kits" in words and "kits" not in request_words:
         return "kits"
@@ -182,10 +190,10 @@ def classify_listing(requested, listing, vehicle=None, fitment_established=False
     requested = " ".join(str(requested or "").split())
     if not requested:
         return _hold("Held for clarification: the requested part is not stated.", ambiguous=True)
-    text = _listing_text(listing)
-    conflict = _conflict_word(requested, text)
+    source = _source_text(listing)
+    conflict = _conflict_word(requested, _listing_text(listing))
     if conflict:
-        offered = _offered_phrase(text, conflict)
+        offered = _offered_phrase(_listing_text(listing), conflict)
         return {
             "status": "conflict",
             "offered": offered,
@@ -193,14 +201,14 @@ def classify_listing(requested, listing, vehicle=None, fitment_established=False
             "ambiguous": False,
             "reason": f"This listing offers a {offered}, not the requested {requested}.",
         }
-    if _kit_is_ambiguous(requested, text):
+    if _kit_is_ambiguous(requested, source):
         return _hold(
             "Held for clarification: the listing text does not establish whether this is "
             f"a complete {requested} or a kit of related parts.",
             ambiguous=True,
         )
     head = _head(requested)
-    if head and head in set(tokens(text)):
+    if head and head in set(tokens(source)):
         if fitment_established:
             return {
                 "status": "qualifying",

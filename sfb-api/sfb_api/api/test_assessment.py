@@ -222,6 +222,40 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(kits["status"], "conflict")
         self.assertIn("repair kits", kits["offered"])
         self.assertIn("variant, brake configuration, axle, and side", held["reason"])
+        rebuild = classify_listing(
+            "brake caliper",
+            {"title": "Rear brake caliper rebuild kit for Porsche 911 GT3 2015-2020"},
+            vehicle,
+        )
+        self.assertEqual(rebuild["status"], "conflict")
+        self.assertIn("rebuild kit", rebuild["offered"])
+        discussion = classify_listing(
+            "brake caliper",
+            {
+                "title": "Under hood rubber grommets for brake-cooling ducts",
+                "offered_name": "brake caliper",
+                "source": "rennlist",
+            },
+            vehicle,
+        )
+        self.assertEqual(discussion["status"], "uncertain")
+        self.assertEqual(discussion["offered"], "")
+        self.assertIn("does not establish what is offered", discussion["reason"])
+        sale = classify_listing(
+            "brake caliper",
+            {"title": "Porsche Brake Caliper Blow Out Sale", "source": "rennlist"},
+            vehicle,
+        )
+        self.assertEqual(sale["status"], "uncertain")
+        self.assertEqual(sale["offered"], "brake caliper")
+        forum_sale = evidence_row({
+            "source": "rennlist",
+            "url": "https://rennlist.com/forums/market/sale",
+            "title": "Porsche Brake Caliper Blow Out Sale",
+            "status": "sold",
+        })
+        self.assertEqual(forum_sale["status"], "asking")
+        self.assertIsNone(forum_sale["sold_at"])
 
     def test_supported_interchange_establishes_fitment_without_catalog(self):
         from sfb_api.api.evidence_store import add_assessment
@@ -370,6 +404,91 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(unresolved["listings"][0]["request_match"]["status"], "uncertain")
         self.assertIn("Variant remains unresolved", reason)
         self.assertNotIn(unresolved["listings"][0]["assessment"]["market"]["status"], ("limited", "median"))
+
+    def test_structured_fitment_confirms_the_caliper_and_holds_previous_numbers(self):
+        from sfb_api.api.evidence_store import add_assessment, catalog_confirms
+        from sfb_api.api.sourced_fitment import oem_numbers_for_request, previous_numbers
+
+        request = {
+            "part_name": "brake caliper",
+            "year": "2015",
+            "make": "Porsche",
+            "model": "911",
+            "variant": "Turbo",
+            "brake_configuration": "iron",
+            "axle": "front",
+            "side": "left",
+        }
+        self.assertEqual(oem_numbers_for_request(request), ["9P1615123L"])
+        self.assertTrue(catalog_confirms("9P1615123L", request))
+        self.assertFalse(catalog_confirms("99135142713", request))
+        self.assertFalse(catalog_confirms("99135142712", request))
+        previous = previous_numbers("9P1615123L")
+        self.assertEqual(
+            [item["number"] for item in previous],
+            ["99135142713", "99135142712"],
+        )
+        self.assertTrue(all(item["relation"] == "supplier_reported_previous" for item in previous))
+        self.assertTrue(all(item["replacement_confirmed"] is False for item in previous))
+        for number in ("99135142713", "99135142712"):
+            self.assertNotIn(number, oem_numbers_for_request(request))
+        other = dict(request)
+        other["variant"] = "Turbo S"
+        self.assertEqual(oem_numbers_for_request(other), [])
+        self.assertFalse(catalog_confirms("9P1615123L", other))
+        ceramic = dict(request)
+        ceramic["brake_configuration"] = "PCCB"
+        self.assertFalse(catalog_confirms("9P1615123L", ceramic))
+
+        claim = {
+            "kind": "mpn", "type": "mpn", "source": "seller",
+            "value": "9P1615123L", "matches": True, "verified": False,
+        }
+        found = {
+            "request": request,
+            "listings": [{
+                "source": "ebay",
+                "item_id": "caliper",
+                "url": "https://www.ebay.com/itm/caliper",
+                "title": "Porsche 911 Turbo front left brake caliper",
+                "price_amount": "900.00",
+                "price_currency": "USD",
+                "identifiers": [dict(claim)],
+                "configuration": "front",
+                "side": "left",
+            }],
+            "reader": [],
+        }
+        add_assessment(found, evidence=MemoryEvidence(), confirm_fitment=None, today=TODAY)
+        match = found["listings"][0]["request_match"]
+        self.assertEqual(match["status"], "qualifying")
+        self.assertEqual(match["fitment"], "catalog")
+        self.assertTrue(found["listings"][0]["identifiers"][0]["verified"])
+        self.assertEqual(found["listings"][0]["assessment"]["market"]["status"], "needs_data")
+
+        old_number = dict(claim)
+        old_number["value"] = "99135142713"
+        previous_offer = {
+            "request": request,
+            "listings": [{
+                "source": "ebay",
+                "item_id": "old",
+                "url": "https://www.ebay.com/itm/old",
+                "title": "Porsche 911 Turbo front left brake caliper",
+                "price_amount": "400.00",
+                "price_currency": "USD",
+                "identifiers": [old_number],
+                "configuration": "front",
+                "side": "left",
+            }],
+            "reader": [],
+        }
+        add_assessment(previous_offer, evidence=MemoryEvidence(), today=TODAY)
+        self.assertEqual(previous_offer["listings"][0]["request_match"]["status"], "uncertain")
+        self.assertNotEqual(
+            previous_offer["listings"][0]["assessment"]["market"]["status"],
+            "limited",
+        )
 
     def test_a_bolt_with_the_same_number_does_not_set_the_caliper_price(self):
         caliper = {

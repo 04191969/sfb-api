@@ -39,6 +39,8 @@ def _named(items, source_id, part_name, require_part=True):
         if require_part and not keep_listing(item, part_name):
             continue
         item["source"] = source_id
+        if item.get("sale_status") != "sold" or not item.get("sold_at"):
+            item["sale_status"] = "asking"
         kept.append(item)
     return kept
 
@@ -113,16 +115,24 @@ def _merge_facts(listing, facts):
 
 
 def _catalog_oem_numbers(part_name, year, make, model, request):
-    """Catalog numbers for this exact request. A coarse request does not widen the search."""
+    """Manufacturer numbers for this exact request. A coarse request does not widen the search.
+
+    A caliper number comes from structured fitment. Unconfirmed previous numbers
+    are not searched. Other parts still use the catalog text lookup.
+    """
     from django.conf import settings
 
-    from .request_match import request_is_specific
+    from .request_match import is_caliper_request, request_is_specific
 
     if not request_is_specific(request):
         return []
-    if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
-        return []
     if not str(year or "").strip().isdigit() or not make or not model or not part_name:
+        return []
+    if is_caliper_request(part_name):
+        from .sourced_fitment import oem_numbers_for_request as sourced_numbers
+
+        return sourced_numbers(request)
+    if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
         return []
     try:
         from .catalog import oem_numbers_for_request
