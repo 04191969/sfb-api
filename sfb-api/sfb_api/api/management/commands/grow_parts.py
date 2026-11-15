@@ -44,6 +44,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--make", required=True)
         parser.add_argument("--model", default=None)
+        parser.add_argument("--year", type=int, default=0)
         parser.add_argument("--source", default=ROCKAUTO, choices=SOURCES)
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--max-pages", type=int, default=4)
@@ -69,7 +70,7 @@ class Command(BaseCommand):
 
     def collect(self, options):
         source = options["source"]
-        vehicles = self.vehicles(options["make"], options["model"])
+        vehicles = self.vehicles(options["make"], options["model"], options["year"])
         if options["limit"]:
             vehicles = vehicles[: options["limit"]]
         self.stdout.write(
@@ -157,7 +158,7 @@ class Command(BaseCommand):
                 self.report.fitment_new += created
                 self.report.fitment_updated += updated
 
-    def vehicles(self, make, model):
+    def vehicles(self, make, model, year=0):
         query = (
             get_supabase()
             .table("vehicles")
@@ -166,6 +167,8 @@ class Command(BaseCommand):
         )
         if model:
             query = query.ilike("model", model.strip())
+        if year:
+            query = query.eq("year", int(year))
         return query.order("year").limit(500).execute().data or []
 
     def vehicle_url(self, vehicle, source):

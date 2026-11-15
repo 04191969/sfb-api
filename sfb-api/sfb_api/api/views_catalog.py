@@ -575,16 +575,25 @@ def growth_run(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     model = request.data.get("model")
+    year = request.data.get("year")
     try:
         max_pages = int(request.data.get("max_pages") or 4)
     except (TypeError, ValueError):
         return Response({"error": "max_pages must be a number"}, status=status.HTTP_400_BAD_REQUEST)
     max_pages = max(1, min(max_pages, 20))
+    year_number = None
+    if year not in (None, ""):
+        try:
+            year_number = int(year)
+        except (TypeError, ValueError):
+            return Response({"error": "year must be a number"}, status=status.HTTP_400_BAD_REQUEST)
 
     def run():
         kwargs = {"make": make.strip(), "source": source, "max_pages": max_pages}
         if isinstance(model, str) and model.strip():
             kwargs["model"] = model.strip()
+        if year_number:
+            kwargs["year"] = year_number
         call_command("grow_parts", **kwargs)
 
     threading.Thread(target=run, daemon=True).start()
@@ -592,6 +601,7 @@ def growth_run(request):
         "status": "started",
         "make": make.strip(),
         "model": model.strip() if isinstance(model, str) else None,
+        "year": year_number,
         "source": source,
         "max_pages": max_pages,
     })
