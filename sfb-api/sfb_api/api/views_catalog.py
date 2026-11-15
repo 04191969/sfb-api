@@ -594,6 +594,10 @@ def listing_find(request):
             model=request.data.get("model") or "",
             year=request.data.get("year") or "",
             carcode=request.data.get("carcode"),
+            variant=request.data.get("variant") or "",
+            brake_configuration=request.data.get("brake_configuration") or "",
+            axle=request.data.get("axle") or "",
+            side=request.data.get("side") or "",
         )
     except Exception as exc:
         return _server_error(exc)

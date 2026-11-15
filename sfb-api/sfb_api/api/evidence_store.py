@@ -202,6 +202,14 @@ def _mark_verified(listing, number):
             item["verified"] = True
 
 
+def _catalog_vehicle_matches(row, variant):
+    haystack = " ".join(
+        str(row.get(field) or "")
+        for field in ("generation", "engine", "body_style", "model")
+    ).casefold()
+    return bool(variant) and variant in haystack
+
+
 def catalog_confirms(part_number, vehicle):
     """True when catalog manufacturer data fits this number to the requested vehicle."""
     from django.conf import settings
@@ -217,31 +225,61 @@ def catalog_confirms(part_number, vehicle):
         return False
     try:
         from .catalog import fitment_for_parts, part_by_oem, search_vehicles
-        from .request_match import _conflict_word, _head, tokens
+        from .request_match import _conflict_word, _head, is_caliper_request, request_is_specific, tokens
 
+        requested = vehicle.get("part_name") or ""
+        caliper = is_caliper_request(requested)
+        if caliper and not request_is_specific(vehicle):
+            return False
         part = part_by_oem(number)
         if not part:
             return False
         catalog_name = part.get("part_name") or ""
-        requested = vehicle.get("part_name") or ""
         if _conflict_word(requested, catalog_name):
             return False
         head = _head(requested)
         if head and head not in set(tokens(catalog_name)):
             return False
         vehicles = search_vehicles(make, model, int(year))
+        if caliper:
+            variant = str(vehicle.get("variant") or "").strip().casefold()
+            vehicles = [row for row in vehicles if _catalog_vehicle_matches(row, variant)]
         vehicle_ids = {row.get("id") for row in vehicles}
         if not vehicle_ids:
             return False
-        rows = fitment_for_parts([part["id"]])
-        return any(row.get("vehicle_id") in vehicle_ids for row in rows)
+        wanted = []
+        if caliper:
+            wanted = [
+                str(vehicle.get(key) or "").strip().casefold()
+                for key in ("brake_configuration", "axle", "side")
+            ]
+        for row in fitment_for_parts([part["id"]]):
+            if row.get("vehicle_id") not in vehicle_ids:
+                continue
+            if not wanted:
+                return True
+            haystack = f"{catalog_name} {row.get('qualifier') or ''}".casefold()
+            if all(piece in haystack for piece in wanted):
+                return True
+        return False
     except Exception:
         return False
 
 
+def _position_agrees(listing, request):
+    """A stated axle or side that differs from the request is not that part."""
+    request = request or {}
+    for listing_key, request_key in (("configuration", "axle"), ("side", "side")):
+        stated = str(listing.get(listing_key) or "").strip()
+        wanted = str(request.get(request_key) or "").strip()
+        if stated and wanted and stated.casefold() != wanted.casefold():
+            return False
+    return True
+
+
 def _classify_rows(listings, request, confirm, answers=None, interchange=None):
     from .assessment import interchange_establishes, listing_key, part_number_of
-    from .request_match import classify_listing
+    from .request_match import classify_listing, request_is_specific
 
     request = request or {}
     requested = request.get("part_name") or ""
@@ -265,9 +303,15 @@ def _classify_rows(listings, request, confirm, answers=None, interchange=None):
     keys = set()
     for item in listings:
         match = classify_listing(requested, item, request, fitment_established=False)
-        if match.get("status") == "uncertain" and match.get("offered") and not match.get("ambiguous"):
+        if (
+            request_is_specific(request)
+            and match.get("status") == "uncertain"
+            and match.get("offered")
+            and not match.get("ambiguous")
+            and _position_agrees(item, request)
+        ):
             fitment_by = ""
-            if interchange_establishes(item, interchange):
+            if interchange_establishes(item, interchange, request):
                 fitment_by = "interchange"
             elif catalog_established(item):
                 fitment_by = "catalog"

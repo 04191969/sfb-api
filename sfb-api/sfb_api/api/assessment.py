@@ -150,18 +150,57 @@ def interchange_applies(subject, other_number, records):
     return False
 
 
-def interchange_establishes(listing, records):
-    """Supported interchange is a fitment path when the three qualifiers match.
+def _request_position(listing, request):
+    """The listing's stated axle and side have to be the ones the buyer asked for."""
+    request = request or {}
+    axle = _text(request.get("axle"))
+    side = _text(request.get("side"))
+    if not axle or not side:
+        return False
+    return (
+        _text(listing.get("configuration")).casefold() == axle.casefold()
+        and _text(listing.get("side")).casefold() == side.casefold()
+    )
+
+
+def _record_matches_request(record, request):
+    """An interchange record covers this request only when it states the same identity."""
+    request = request or {}
+    checks = (
+        ("configuration", "axle"),
+        ("side", "side"),
+        ("variant", "variant"),
+        ("brake_configuration", "brake_configuration"),
+    )
+    for record_key, request_key in checks:
+        left = _text(record.get(record_key))
+        right = _text(request.get(request_key))
+        if not left or not right or left.casefold() != right.casefold():
+            return False
+    return True
+
+
+def interchange_establishes(listing, records, request=None):
+    """Supported interchange is a fitment path when the requested identity matches.
 
     Direct catalog coverage is a separate path. A part number with no
-    configuration, side, and assembly does not take this one.
+    configuration, side, and assembly does not take this one. A request that
+    does not name the variant, brake configuration, axle, and side does not
+    either: those are what separate one caliper from another.
     """
+    from .request_match import request_is_specific, is_caliper_request
+
     number = part_number_of(listing)
-    if not number:
+    caliper = is_caliper_request((request or {}).get("part_name"))
+    if not number or (caliper and not request_is_specific(request)):
         return False
     if not all(_text(listing.get(field)) for field in ("configuration", "side", "assembly")):
         return False
+    if caliper and not _request_position(listing, request):
+        return False
     for record in records or []:
+        if caliper and not _record_matches_request(record, request):
+            continue
         left = _text(record.get("part_number"))
         right = _text(record.get("equivalent_part_number"))
         if number.casefold() == left.casefold():

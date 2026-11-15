@@ -114,26 +114,43 @@ def _missing_fitment_column(exc):
     return any(name in message for name in ("confidence", "qualifier", "match_method"))
 
 
-def oem_numbers_for_request(part_name, make, model, year, limit=3):
-    """Manufacturer numbers the catalog fits to this vehicle and part. Other products are left out."""
+def oem_numbers_for_request(part_name, make, model, year, limit=3, request=None):
+    """Manufacturer numbers the catalog fits to this vehicle and this exact part."""
     from .request_match import _conflict_word, _head, tokens
 
+    request = request or {}
     year_number = int(str(year).strip())
     head = _head(part_name)
+    variant = str(request.get("variant") or "").strip().casefold()
+    wanted = [
+        str(request.get(key) or "").strip().casefold()
+        for key in ("brake_configuration", "axle", "side")
+        if str(request.get(key) or "").strip()
+    ]
     found = []
     seen = set()
     for vehicle in search_vehicles(make, model, year_number)[:4]:
+        identity = " ".join(
+            str(vehicle.get(field) or "")
+            for field in ("generation", "engine", "body_style", "model")
+        ).casefold()
+        if variant and variant not in identity:
+            continue
         rows = fitment_for_vehicle(vehicle["id"])
         parts = rows_by_id(
             "parts",
             [row.get("part_id") for row in rows],
             "id,part_name,oem_part_number",
         )
-        for part in parts.values():
+        for row in rows:
+            part = parts.get(row.get("part_id")) or {}
             name = part.get("part_name") or ""
             if _conflict_word(part_name, name):
                 continue
             if head and head not in set(tokens(name)):
+                continue
+            haystack = f"{name} {row.get('qualifier') or ''}".casefold()
+            if any(piece not in haystack for piece in wanted):
                 continue
             oem = str(part.get("oem_part_number") or "").strip()
             key = oem.casefold()

@@ -54,12 +54,82 @@ def _listing_text(listing):
     )
 
 
+REQUEST_FIELDS = (
+    ("variant", "variant"),
+    ("brake_configuration", "brake configuration"),
+    ("axle", "axle"),
+    ("side", "side"),
+)
+
+
+UNKNOWN_VALUES = frozenset({"unknown", "i don't know", "i dont know"})
+
+
+def is_caliper_request(part_name):
+    """Axle, side, variant, and brake configuration apply to a caliper, not every part."""
+    return "caliper" in set(tokens(part_name))
+
+
+def unresolved_request_fields(request):
+    """Omitted fields, then an explicit I-don't-know. A year and model do not supply them."""
+    request = request or {}
+    omitted = []
+    unknown = []
+    for key, label in REQUEST_FIELDS:
+        value = str(request.get(key) or "").strip()
+        if not value:
+            omitted.append(label)
+        elif value.casefold() in UNKNOWN_VALUES:
+            unknown.append(label)
+    return omitted, unknown
+
+
+def missing_request_fields(request):
+    omitted, _unknown = unresolved_request_fields(request)
+    return omitted
+
+
+def request_is_specific(request):
+    if not is_caliper_request((request or {}).get("part_name")):
+        return True
+    omitted, unknown = unresolved_request_fields(request)
+    return not omitted and not unknown
+
+
+def _shown_value(value):
+    text = str(value or "").strip()
+    if not text or text.casefold() in UNKNOWN_VALUES:
+        return ""
+    return text
+
+
+def _and_list(items):
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + ", and " + items[-1]
+
+
+def _repair_kit_word(words, request_words):
+    """Plural repair kits are the same conflict as a repair kit."""
+    if "repair" not in words:
+        return ""
+    if "kits" in words and "kits" not in request_words:
+        return "kits"
+    if "kit" in words and "kit" not in request_words:
+        return "kit"
+    return ""
+
+
 def _conflict_word(requested, text):
     """The last clear conflicting noun. A bare kit is not clear."""
     words = tokens(text)
     request_words = set(tokens(requested))
-    if "repair" in words and "kit" in words and "kit" not in request_words:
-        return "kit"
+    repair_kit = _repair_kit_word(words, request_words)
+    if repair_kit:
+        return repair_kit
     found = ""
     for word in words:
         if word in CONFLICT_WORDS and word not in request_words:
@@ -89,6 +159,10 @@ def _vehicle_label(vehicle):
             str(vehicle.get("year") or "").strip(),
             str(vehicle.get("make") or "").strip(),
             str(vehicle.get("model") or "").strip(),
+            _shown_value(vehicle.get("variant")),
+            _shown_value(vehicle.get("brake_configuration")),
+            _shown_value(vehicle.get("axle")),
+            _shown_value(vehicle.get("side")),
         ) if piece
     )
 
@@ -137,11 +211,18 @@ def classify_listing(requested, listing, vehicle=None, fitment_established=False
             }
         car = _vehicle_label(vehicle)
         where = f" to the {car}" if car else ""
-        return _hold(
+        reason = (
             f"Held for clarification: the listing offers a {requested}, "
-            f"and fitment{where} is not established.",
-            offered=requested,
+            f"and fitment{where} is not established."
         )
+        missing, unknown = unresolved_request_fields(vehicle)
+        if is_caliper_request(requested) and missing:
+            reason += f" The request does not specify {_and_list(missing)}."
+        if is_caliper_request(requested) and unknown:
+            joined = _and_list(unknown)
+            verb = "remains" if len(unknown) == 1 else "remain"
+            reason += f" {joined[:1].upper()}{joined[1:]} {verb} unresolved, so fitment cannot be established."
+        return _hold(reason, offered=requested)
     return _hold(
         "Held for clarification: the listing text does not establish what is offered.",
         ambiguous=True,

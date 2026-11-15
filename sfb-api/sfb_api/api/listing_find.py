@@ -112,10 +112,14 @@ def _merge_facts(listing, facts):
         listing["fitment_claims"] = claims
 
 
-def _catalog_oem_numbers(part_name, year, make, model):
-    """Catalog numbers for this request. A missing catalog leaves discovery on the part name."""
+def _catalog_oem_numbers(part_name, year, make, model, request):
+    """Catalog numbers for this exact request. A coarse request does not widen the search."""
     from django.conf import settings
 
+    from .request_match import request_is_specific
+
+    if not request_is_specific(request):
+        return []
     if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
         return []
     if not str(year or "").strip().isdigit() or not make or not model or not part_name:
@@ -123,7 +127,7 @@ def _catalog_oem_numbers(part_name, year, make, model):
     try:
         from .catalog import oem_numbers_for_request
 
-        return oem_numbers_for_request(part_name, make, model, year)
+        return oem_numbers_for_request(part_name, make, model, year, request=request)
     except Exception:
         return []
 
@@ -204,9 +208,19 @@ def _source_reader(listings):
     return rows
 
 
-def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None, now=None, budget_seconds=SEARCH_BUDGET, confirm_fitment=None):
+def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None, now=None, budget_seconds=SEARCH_BUDGET, confirm_fitment=None, variant="", brake_configuration="", axle="", side=""):
     """Return listings, sources that were skipped, and the raw text a reader can use."""
     part_name = str(part_name or "").strip()
+    request = {
+        "year": year,
+        "make": make,
+        "model": model,
+        "part_name": part_name,
+        "variant": str(variant or "").strip(),
+        "brake_configuration": str(brake_configuration or "").strip(),
+        "axle": str(axle or "").strip(),
+        "side": str(side or "").strip(),
+    }
     text = search_text(part_name, make, model, year)
     listings = []
     skipped = []
@@ -229,7 +243,7 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
         try:
             seen = set()
             vehicle_fields = {"year": year, "make": make, "model": model}
-            for number in _catalog_oem_numbers(part_name, year, make, model):
+            for number in _catalog_oem_numbers(part_name, year, make, model, request):
                 if time_left() < 40:
                     break
                 try:
@@ -295,8 +309,8 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     }
     from .evidence_store import add_assessment
 
-    vehicle = {"year": year, "make": make, "model": model, "part_name": part_name}
-    found["request"] = vehicle
+    vehicle = request
+    found["request"] = request
     if time_left() < 22:
         _mark_deadline(skipped)
         found["reader"] = keep_source_facts(found["listings"], _source_reader(found["listings"]))

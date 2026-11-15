@@ -154,6 +154,12 @@ class AssessmentTests(unittest.TestCase):
         found = find_listings(
             "caliper",
             make="Porsche",
+            model="911",
+            year="2015",
+            variant="Turbo",
+            brake_configuration="iron",
+            axle="front",
+            side="left",
             ebay=Ebay(),
             old_cars=lambda _text: [],
             get=get_status,
@@ -208,6 +214,14 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(fraction["offered"], "3/8-inch drive tool")
         hardware = classify_listing("brake caliper", {"title": "Brake caliper hardware kit"}, vehicle)
         self.assertEqual(hardware["status"], "conflict")
+        kits = classify_listing(
+            "brake caliper",
+            {"title": "2 pc Centric Front Brake Caliper Repair Kits for 2014-2019 Porsche 911"},
+            vehicle,
+        )
+        self.assertEqual(kits["status"], "conflict")
+        self.assertIn("repair kits", kits["offered"])
+        self.assertIn("variant, brake configuration, axle, and side", held["reason"])
 
     def test_supported_interchange_establishes_fitment_without_catalog(self):
         from sfb_api.api.evidence_store import add_assessment
@@ -222,6 +236,8 @@ class AssessmentTests(unittest.TestCase):
             "configuration": "front",
             "side": "left",
             "assembly": "caliper",
+            "variant": "Turbo",
+            "brake_configuration": "iron",
         }
         qualifiers = {"configuration": "front", "side": "left", "assembly": "caliper"}
 
@@ -238,7 +254,16 @@ class AssessmentTests(unittest.TestCase):
             row.update(extra)
             return row
 
-        request = {"part_name": "brake caliper", "year": "2015", "make": "Porsche", "model": "911"}
+        request = {
+            "part_name": "brake caliper",
+            "year": "2015",
+            "make": "Porsche",
+            "model": "911",
+            "variant": "Turbo",
+            "brake_configuration": "iron",
+            "axle": "front",
+            "side": "left",
+        }
         found = {
             "request": request,
             "listings": [
@@ -287,6 +312,64 @@ class AssessmentTests(unittest.TestCase):
             today=TODAY,
         )
         self.assertEqual(bolt["listings"][0]["request_match"]["status"], "conflict")
+
+        coarse = {
+            "request": {
+                "part_name": "brake caliper",
+                "year": "2015",
+                "make": "Porsche",
+                "model": "911",
+            },
+            "listings": [
+                listing("5", "Front left brake caliper", "80.00", **qualifiers),
+                listing("6", "Front left brake caliper", "100.00", **qualifiers),
+            ],
+            "reader": [],
+        }
+        add_assessment(
+            coarse,
+            evidence=MemoryEvidence(interchange=[record]),
+            confirm_fitment=lambda *_args: True,
+            today=TODAY,
+        )
+        self.assertEqual(coarse["listings"][0]["request_match"]["status"], "uncertain")
+        self.assertIn("does not specify", coarse["listings"][0]["request_match"]["reason"])
+        self.assertNotIn(coarse["listings"][0]["assessment"]["market"]["status"], ("limited", "median"))
+
+        other_variant = dict(request)
+        other_variant["variant"] = "GT3"
+        other_variant["axle"] = "rear"
+        mismatched = {
+            "request": other_variant,
+            "listings": [listing("7", "Front left brake caliper", "80.00", **qualifiers)],
+            "reader": [],
+        }
+        add_assessment(
+            mismatched,
+            evidence=MemoryEvidence(interchange=[record]),
+            confirm_fitment=lambda *_args: True,
+            today=TODAY,
+        )
+        self.assertEqual(mismatched["listings"][0]["request_match"]["status"], "uncertain")
+        self.assertNotIn(mismatched["listings"][0]["assessment"]["market"]["status"], ("limited", "median"))
+
+        unknown = dict(request)
+        unknown["variant"] = "unknown"
+        unresolved = {
+            "request": unknown,
+            "listings": [listing("8", "Front left brake caliper", "80.00", **qualifiers)],
+            "reader": [],
+        }
+        add_assessment(
+            unresolved,
+            evidence=MemoryEvidence(interchange=[record]),
+            confirm_fitment=lambda *_args: True,
+            today=TODAY,
+        )
+        reason = unresolved["listings"][0]["request_match"]["reason"]
+        self.assertEqual(unresolved["listings"][0]["request_match"]["status"], "uncertain")
+        self.assertIn("Variant remains unresolved", reason)
+        self.assertNotIn(unresolved["listings"][0]["assessment"]["market"]["status"], ("limited", "median"))
 
     def test_a_bolt_with_the_same_number_does_not_set_the_caliper_price(self):
         caliper = {
