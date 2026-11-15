@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/watch/', views_catalog.watch, name='watch'),
     path('api/watch', views_catalog.watch, name='watch-noslash'),
     path('api/catalog/grow/', views_catalog.catalog_grow, name='catalog-grow'),
+    path('api/catalog/import/', views_catalog.catalog_import, name='catalog-import'),
     path('api/growth/run/', views_catalog.growth_run, name='growth-run'),
 
     # Billing. The webhook is public and checks the Stripe signature.

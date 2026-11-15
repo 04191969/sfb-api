@@ -1,6 +1,7 @@
 """Pure shaping helpers for the fitment catalog. No network and no Django."""
 
 import re
+import uuid
 
 from .catalog_parse import present_category, present_name
 from .catalog_route import confidence_label, visible_to_buyers
@@ -216,7 +217,7 @@ def vehicle_record(row):
 
 def part_record(row):
     part_id = blank(row.get("id"))
-    part_name = blank(row.get("part_name"))
+    part_name = blank(row.get("part_name")) or blank(row.get("name"))
     if not is_uuid(part_id) or not part_name:
         return None
     return {
@@ -234,28 +235,133 @@ def fitment_record(row):
     vehicle_id = blank(row.get("vehicle_id"))
     if not is_uuid(fitment_id) or not is_uuid(part_id) or not is_uuid(vehicle_id):
         return None
-    return {
+    record = {
         "id": fitment_id,
         "part_id": part_id,
         "vehicle_id": vehicle_id,
         "source": blank(row.get("source")),
         "confirmed_at": blank(row.get("confirmed_at")),
     }
+    score = blank(row.get("confidence"))
+    if score is not None:
+        try:
+            record["confidence"] = float(score)
+        except ValueError:
+            pass
+    qualifier = blank(row.get("qualifier"))
+    if qualifier:
+        record["qualifier"] = qualifier
+    method = blank(row.get("match_method"))
+    if method:
+        record["match_method"] = method
+    return record
 
 
 def dedupe_fitment(rows):
-    """Keep the first row for each part/vehicle pair."""
-    seen = set()
-    kept = []
+    """Keep the strongest row for each part/vehicle pair."""
+    kept = {}
+    order = []
     dropped = 0
     for row in rows:
         key = (row["part_id"], row["vehicle_id"])
-        if key in seen:
-            dropped += 1
+        current = kept.get(key)
+        if current is None:
+            kept[key] = row
+            order.append(key)
             continue
-        seen.add(key)
-        kept.append(row)
-    return kept, dropped
+        dropped += 1
+        if _fit_score(row) > _fit_score(current):
+            kept[key] = row
+    return [kept[key] for key in order], dropped
+
+
+def _fit_score(row):
+    try:
+        return float(row.get("confidence"))
+    except (TypeError, ValueError):
+        return -1.0
+
+
+def _stated_years(start, end):
+    """Every year the file states. A blank end is the start year."""
+    try:
+        first = int(str(start).strip())
+        last = int(str(end if end not in (None, "") else start).strip())
+    except (TypeError, ValueError):
+        return []
+    if last < first:
+        first, last = last, first
+    if first < 1920 or last > 2039 or last - first > 80:
+        return []
+    return list(range(first, last + 1))
+
+
+def expand_catalog(vehicle_rows, part_rows, fitment_rows):
+    """Turn year-range vehicles into one row per year and copy each fit across that span."""
+    vehicles = []
+    years_for = {}
+    for row in vehicle_rows or []:
+        made = _expand_vehicle(row)
+        for record, origin in made:
+            vehicles.append(record)
+            years_for.setdefault(origin, []).append((record["year"], record["id"]))
+
+    parts = []
+    for row in part_rows or []:
+        record = part_record(row)
+        if record:
+            parts.append(record)
+    part_ids = {row["id"] for row in parts}
+
+    fitment = []
+    for row in fitment_rows or []:
+        record = fitment_record(row)
+        if not record or record["part_id"] not in part_ids:
+            continue
+        targets = years_for.get(record["vehicle_id"])
+        if not targets:
+            continue
+        for year, vehicle_id in targets:
+            item = dict(record)
+            item["vehicle_id"] = vehicle_id
+            if vehicle_id != record["vehicle_id"]:
+                item["id"] = str(uuid.uuid5(uuid.UUID(record["id"]), str(year)))
+            if not item.get("source"):
+                item["source"] = "parts_list"
+            fitment.append(item)
+    fitment, dropped = dedupe_fitment(fitment)
+    return {
+        "vehicles": vehicles,
+        "parts": parts,
+        "fitment": fitment,
+        "duplicate_fitment": dropped,
+    }
+
+
+def _expand_vehicle(row):
+    origin = blank(row.get("id"))
+    if not is_uuid(origin):
+        return []
+    if blank(row.get("year_start")) or blank(row.get("year_end")):
+        years = _stated_years(row.get("year_start"), row.get("year_end"))
+        if not years:
+            return []
+        span = f"{years[0]}-{years[-1]}"
+        made = []
+        for year in years:
+            copy = dict(row)
+            copy["year"] = year
+            copy["id"] = str(uuid.uuid5(uuid.UUID(origin), str(year)))
+            copy["engine"] = copy.get("engine") or copy.get("engine_type")
+            copy["generation"] = copy.get("generation") or span
+            record = vehicle_record(copy)
+            if record:
+                made.append((record, origin))
+        return made
+    record = vehicle_record(row)
+    if not record:
+        return []
+    return [(record, origin)]
 
 
 def normalize_extracted_parts(parts, source_vehicle=None):

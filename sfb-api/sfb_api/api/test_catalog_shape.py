@@ -15,6 +15,7 @@ from sfb_api.api.catalog_shape import (
     clean_tokens,
     cross_car_matches,
     dedupe_fitment,
+    expand_catalog,
     fitment_record,
     fitment_vehicles,
     group_parts,
@@ -96,6 +97,46 @@ class FitmentShapeTests(unittest.TestCase):
         self.assertTrue(name_matches("Front Brake Caliper", "brake caliper"))
         self.assertFalse(name_matches("Brake Pad", "brake caliper"))
         self.assertEqual(clean_tokens("brake+caliper"), ["brake", "caliper"])
+
+
+class RangeImportTests(unittest.TestCase):
+    def test_a_year_range_becomes_one_vehicle_per_year(self):
+        prepared = expand_catalog(
+            [{
+                "id": "c88987a5-eee9-43bb-be58-49451ac02c4b",
+                "make": "Acura",
+                "model": "Integra",
+                "year_start": "1986",
+                "year_end": "1988",
+                "body_style": "Coupe",
+                "engine_type": "I4",
+            }],
+            [{
+                "id": "f900b519-0ccc-42c7-aca9-6679a5c195e5",
+                "name": "Brake Pad Set Front",
+                "category": "Brakes",
+                "oem_part_number": "D2064",
+            }],
+            [{
+                "id": "125e4e55-7f9f-49c8-ab34-f1c111b2da89",
+                "vehicle_id": "c88987a5-eee9-43bb-be58-49451ac02c4b",
+                "part_id": "f900b519-0ccc-42c7-aca9-6679a5c195e5",
+                "confidence": "1.0",
+                "qualifier": "Direct fit",
+                "match_method": "platform",
+            }],
+        )
+        self.assertEqual([row["year"] for row in prepared["vehicles"]], [1986, 1987, 1988])
+        self.assertEqual(prepared["vehicles"][0]["engine"], "I4")
+        self.assertEqual(prepared["vehicles"][0]["generation"], "1986-1988")
+        self.assertEqual(prepared["parts"][0]["part_name"], "Brake Pad Set Front")
+        self.assertEqual(len(prepared["fitment"]), 3)
+        self.assertEqual(prepared["fitment"][0]["confidence"], 1.0)
+        self.assertEqual(prepared["fitment"][0]["qualifier"], "Direct fit")
+        self.assertEqual(
+            {row["vehicle_id"] for row in prepared["fitment"]},
+            {row["id"] for row in prepared["vehicles"]},
+        )
 
 
 class SeedTests(unittest.TestCase):

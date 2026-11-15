@@ -7,6 +7,15 @@ PAGE_SIZE = 1000
 MAX_PAGES = 30
 
 
+def save_catalog_import(vehicles, parts, fitment):
+    """Upsert a prepared catalog. Vehicles and parts go in before fitment."""
+    client = get_supabase()
+    for table, rows in (("vehicles", vehicles), ("parts", parts), ("fitment", fitment)):
+        for index in range(0, len(rows), 400):
+            client.table(table).upsert(rows[index:index + 400], on_conflict="id").execute()
+    return {"vehicles": len(vehicles), "parts": len(parts), "fitment": len(fitment)}
+
+
 def _escape_exact(value):
     """Escape ILIKE wildcards so a model name is matched literally."""
     return (

@@ -1,3 +1,6 @@
+import csv
+import io
+
 from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -23,6 +26,7 @@ from .catalog import (
     list_watches,
     list_watches_by_email,
     rows_by_id,
+    save_catalog_import,
     save_email_watch,
     save_watch,
     search_parts,
@@ -33,6 +37,7 @@ from .catalog import (
 from .catalog_shape import (
     cascade,
     clean_tokens,
+    expand_catalog,
     cross_car_matches,
     fitment_vehicles,
     group_parts,
@@ -554,6 +559,39 @@ def watch_results(request, watch_id):
     except Exception as exc:
         return _server_error(exc)
     return Response({"results": results, "count": len(results)})
+
+
+def _import_rows(value):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.strip():
+        return list(csv.DictReader(io.StringIO(value)))
+    return None
+
+
+@api_view(["POST"])
+def catalog_import(request):
+    """Add a vehicle, part, and fitment list. Year ranges become one row per year."""
+    vehicles = _import_rows(request.data.get("vehicles"))
+    parts = _import_rows(request.data.get("parts"))
+    fitment = _import_rows(request.data.get("fitment"))
+    if vehicles is None or parts is None or fitment is None:
+        return Response(
+            {"error": "vehicles, parts, and fitment are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    prepared = expand_catalog(vehicles, parts, fitment)
+    if not prepared["vehicles"] or not prepared["parts"]:
+        return Response(
+            {"error": "No vehicles or parts to add"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        saved = save_catalog_import(prepared["vehicles"], prepared["parts"], prepared["fitment"])
+    except Exception as exc:
+        return _server_error(exc)
+    saved["duplicate_fitment"] = prepared["duplicate_fitment"]
+    return Response(saved)
 
 
 @api_view(["POST"])
