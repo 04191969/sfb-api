@@ -1,9 +1,29 @@
 from django.urls import path
-from sfb_api.api import views
+from sfb_api.api import views, views_catalog
 
 urlpatterns = [
     # Health check
     path('', views.health_check, name='health'),
+
+    # Fitment catalog. Vehicle dropdowns are public. Every other route uses X-SFB-Key.
+    path('api/vehicles/', views_catalog.vehicle_list, name='vehicle-list'),
+    path('api/vehicles/search', views_catalog.vehicle_search, name='vehicle-search'),
+    path('api/vehicles/search/', views_catalog.vehicle_search, name='vehicle-search-slash'),
+    path('api/parts/', views_catalog.parts_for_vehicle, name='parts-for-vehicle'),
+    path('api/parts/search', views_catalog.part_search, name='part-search'),
+    path('api/parts/search/', views_catalog.part_search, name='part-search-slash'),
+    path('api/fitment/', views_catalog.fitment_for_part, name='fitment-for-part'),
+    path('api/fitment/cross-car', views_catalog.cross_car, name='fitment-cross-car'),
+    path('api/fitment/cross-car/', views_catalog.cross_car, name='fitment-cross-car-slash'),
+    path('api/watch/', views_catalog.watch, name='watch'),
+    path('api/watch', views_catalog.watch, name='watch-noslash'),
+    path('api/catalog/grow/', views_catalog.catalog_grow, name='catalog-grow'),
+
+    # Billing. The webhook is public and checks the Stripe signature.
+    path('api/billing/subscription/', views_catalog.billing_subscription, name='billing-subscription'),
+    path('api/billing/checkout/', views_catalog.billing_checkout, name='billing-checkout'),
+    path('api/billing/portal/', views_catalog.billing_portal, name='billing-portal'),
+    path('api/billing/webhook/', views_catalog.stripe_webhook, name='billing-webhook'),
 
     # Matches
     path('api/matches/', views.match_list, name='match-list'),
@@ -20,6 +40,7 @@ urlpatterns = [
     # Seeker
     path('api/seeker/status/', views.seeker_status, name='seeker-status'),
     path('api/seeker/run/', views.seeker_run, name='seeker-run'),
+    path('api/seeker/runs/<str:run_id>/', views.seeker_run_detail, name='seeker-run-detail'),
 
     # Live matcher
     path('api/match/analyze/', views.match_analyze, name='match-analyze'),

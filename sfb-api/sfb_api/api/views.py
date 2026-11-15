@@ -29,8 +29,8 @@ def match_list(request):
     try:
         sb = get_supabase()
         query = sb.table("matches").select(
-            "*, buyer_posts(username, post_text, source_platform), "
-            "seller_listings(username, listing_text, source_platform), "
+            "*, buyer_posts(username, post_text, source_platform, source_url), "
+            "seller_listings(username, listing_text, source_platform, source_url, price), "
             "sections(name)"
         ).order("created_at", desc=True)
 
@@ -198,20 +198,46 @@ def seeker_run(request):
     else:
         search_query = None
 
+    user_id = request.data.get("user_id")
+    if not isinstance(user_id, str) or not user_id.strip():
+        user_id = None
+
     row = {
         "search_query": search_query,
         "status": "pending",
         "requested_at": datetime.now(timezone.utc).isoformat(),
     }
+    if user_id:
+        row["user_id"] = user_id.strip()
 
     try:
         sb = get_supabase()
-        result = sb.table("seeker_runs").insert(row).execute()
+        try:
+            result = sb.table("seeker_runs").insert(row).execute()
+        except Exception:
+            if "user_id" not in row:
+                raise
+            row.pop("user_id")
+            result = sb.table("seeker_runs").insert(row).execute()
     except Exception as e:
         return _server_error(e)
 
     created = result.data[0] if result.data else row
     return Response(created, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+def seeker_run_detail(request, run_id):
+    """Return one seeker_runs row so a customer site can poll its own search."""
+    try:
+        sb = get_supabase()
+        result = sb.table("seeker_runs").select("*").eq("id", run_id).limit(1).execute()
+    except Exception as e:
+        return _server_error(e)
+
+    if not result.data:
+        return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response(result.data[0])
 
 
 # ── Live Matcher ──

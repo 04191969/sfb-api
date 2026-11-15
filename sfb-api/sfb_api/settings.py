@@ -61,7 +61,24 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 
 # Shared secret between Lovable and this API. Unset means the check is off.
+# GET /api/vehicles/ stays public either way. Health stays public.
 SFB_API_SECRET = os.environ.get('SFB_API_SECRET', '')
+
+# When true, fitment and watch require a paid Supabase user (Bearer token).
+PAID_GATE = os.environ.get('PAID_GATE', 'False').lower() == 'true'
+
+# Stripe subscription. Checkout and the webhook stay disabled until these are set.
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+STRIPE_PRICE_ID = os.environ.get('STRIPE_PRICE_ID', '')
+STRIPE_SUCCESS_URL = os.environ.get(
+    'STRIPE_SUCCESS_URL',
+    'https://bright-web-workshop-37.lovable.app/account?checkout=success',
+)
+STRIPE_CANCEL_URL = os.environ.get(
+    'STRIPE_CANCEL_URL',
+    'https://bright-web-workshop-37.lovable.app/pricing?checkout=cancel',
+)
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
