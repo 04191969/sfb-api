@@ -28,6 +28,16 @@ UNAVAILABLE = (
         "name": "LKQ Pick Your Part",
         "reason": "Web search only. No API or RSS feed.",
     },
+    {
+        "id": "carpart",
+        "name": "Car-Part.com",
+        "reason": "Recycled-parts inventory is a commercial product. No public API, and the site blocks automated reads.",
+    },
+    {
+        "id": "row52",
+        "name": "Row52",
+        "reason": "Pick-n-Pull vehicle locator. Yards list cars, not parts.",
+    },
 )
 
 
@@ -69,7 +79,7 @@ def accessible_sources():
             "id": source_id,
             "name": domain,
             "method": "site-search",
-            "focus": "Salvage and auction listings on every search",
+            "focus": "Classified and auction listings on every search",
         })
         seen.add(source_id)
     return rows
@@ -252,10 +262,9 @@ FORUM_SITES = {
     ],
 }
 
-# Salvage and auction sites. These run on every search, outside the forum cap.
+# Classified and auction pages. These run on every search, outside the forum cap.
+# Car-Part is a commercial inventory. Row52 lists junk cars, not parts. Neither is called.
 SHARED_SITES = (
-    "car-part.com",
-    "row52.com",
     "hemmings.com",
     "bringatrailer.com",
 )

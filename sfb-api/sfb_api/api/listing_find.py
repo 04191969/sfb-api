@@ -9,7 +9,7 @@ import os
 import time
 
 from .catalog_fetch import CatalogBlocked, CatalogMissing, fetch_catalog
-from .ebay_client import EbayBrowseClient, EbayNotConfigured, build_query
+from .ebay_client import EbayBrowseClient, EbayNotConfigured, build_query, listing_facts
 from .listing_sources import (
     CL_CITIES,
     OLD_CARS_LIVE,
@@ -48,7 +48,7 @@ def _fetch_rss(url, get, pause, limit=8):
     return rss_items(text, limit=limit)
 
 
-def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None):
+def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None):
     """Return listings, sources that were skipped, and the raw text a reader can use."""
     part_name = str(part_name or "").strip()
     text = search_text(part_name, make, model, year)
@@ -71,11 +71,19 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
                 {"year": year, "make": make, "model": model},
             )
             for item in ebay.search_parts(query, limit=20):
+                facts = listing_facts(item)
                 listings.append({
                     "source": "ebay",
                     "title": (item.get("title") or "")[:180],
                     "url": item.get("itemWebUrl") or item.get("itemAffiliateWebUrl") or "",
                     "snippet": "",
+                    "item_id": facts["item_id"],
+                    "price_amount": facts["price_amount"],
+                    "price_currency": facts["price_currency"],
+                    "shipping_amount": facts["shipping_amount"],
+                    "shipping_currency": facts["shipping_currency"],
+                    "item_country": facts["item_country"],
+                    "identifiers": facts["identifiers"],
                 })
         except Exception as exc:
             skipped.append({"source": "ebay", "reason": str(exc)})
@@ -114,15 +122,39 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
         "sources": accessible_sources(),
         "reader": None,
     }
-    return attach_reader(
-        found,
-        {"year": year, "make": make, "model": model},
-        read=read,
+    from .evidence_store import add_assessment
+
+    return add_assessment(
+        attach_reader(
+            found,
+            {"year": year, "make": make, "model": model},
+            read=read,
+        ),
+        evidence=evidence,
+        today=today,
     )
 
 
+def _money_label(amount, currency):
+    return " ".join(piece for piece in (str(amount or "").strip(), str(currency or "").strip()) if piece)
+
+
+def _source_note(item):
+    notes = []
+    price = _money_label(item.get("price_amount"), item.get("price_currency"))
+    if price:
+        notes.append("price " + price)
+    shipping = _money_label(item.get("shipping_amount"), item.get("shipping_currency"))
+    if shipping:
+        notes.append("shipping " + shipping)
+    for identifier in item.get("identifiers") or []:
+        notes.append(f"{identifier.get('kind') or 'id'} {identifier.get('value') or ''}".strip())
+    return " ".join(notes)
+
+
 def attach_reader(found, vehicle, read=None):
-    """Hand the raw listings to the reader. A missing key or a bad reply keeps the listings."""
+    """Hand the raw listings to the reader. A source price survives a blank reader price."""
+    listings = found.get("listings") or []
     lines = [
         " | ".join((
             item.get("source") or "",
@@ -130,18 +162,51 @@ def attach_reader(found, vehicle, read=None):
             item.get("title") or "",
             item.get("url") or "",
             item.get("snippet") or "",
+            _source_note(item),
         ))
-        for item in found.get("listings") or []
+        for item in listings
     ]
     raw = "\n".join(lines).strip()
     if not raw:
         return found
     read = read or _read_listings
     try:
-        found["reader"] = read(raw, vehicle)
+        found["reader"] = keep_source_facts(listings, read(raw, vehicle))
     except Exception:
         found["reader"] = None
     return found
+
+
+def keep_source_facts(listings, reader):
+    """A structured source price or part number replaces a reader blank or guess."""
+    if not isinstance(reader, list):
+        return reader
+    by_url = {item.get("url"): item for item in listings if item.get("url")}
+    for row in reader:
+        if not isinstance(row, dict):
+            continue
+        source = by_url.get(row.get("link") or row.get("url") or "")
+        if not source:
+            continue
+        if source.get("price_amount"):
+            row["price"] = _money_label(source["price_amount"], source.get("price_currency"))
+            row["price_amount"] = source["price_amount"]
+            row["price_currency"] = source.get("price_currency")
+        if source.get("shipping_amount"):
+            row["shipping_amount"] = source["shipping_amount"]
+            row["shipping_currency"] = source.get("shipping_currency")
+        if source.get("item_id"):
+            row["item_id"] = source["item_id"]
+        identifiers = source.get("identifiers") or []
+        if identifiers:
+            row["identifiers"] = identifiers
+            part_number = next(
+                (item["value"] for item in identifiers if item.get("kind") in ("mpn", "oem")),
+                "",
+            )
+            if part_number:
+                row["oem_number"] = part_number
+    return reader
 
 
 def _read_listings(raw_text, vehicle):
@@ -157,7 +222,7 @@ def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT):
 
 
 def _shared_listings(part_name, get, pause, skipped):
-    """Salvage and auction sites run on every search, unless Brave already refused."""
+    """Hemmings and Bring a Trailer run on every search, unless Brave already refused."""
     if any(row.get("source") == "brave" for row in skipped):
         return []
     return _site_search(part_name, SHARED_SITES, get, pause, skipped)

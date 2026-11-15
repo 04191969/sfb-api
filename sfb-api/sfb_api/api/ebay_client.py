@@ -63,6 +63,87 @@ def token_is_current(now, deadline):
     return bool(deadline) and now < deadline
 
 
+def _money(node):
+    """A structured amount. A missing value stays unknown rather than becoming zero."""
+    if not isinstance(node, dict):
+        return None, None
+    value = node.get("value")
+    if value in (None, ""):
+        return None, None
+    text = str(value).strip()
+    if not text:
+        return None, None
+    currency = str(node.get("currency") or "").strip() or None
+    return text, currency
+
+
+def _add_identifier(found, seen, kind, value):
+    text = str(value or "").strip()
+    key = (kind, text.casefold())
+    if not text or key in seen:
+        return
+    seen.add(key)
+    found.append({"kind": kind, "value": text})
+
+
+def _country(location):
+    if not isinstance(location, dict):
+        return None
+    text = str(location.get("country") or "").strip()
+    return text or None
+
+
+def _aspect_kind(name):
+    folded = " ".join(str(name or "").casefold().replace("_", " ").split())
+    if not folded:
+        return ""
+    if "interchange" in folded:
+        return "interchange"
+    if "part number" in folded or folded in ("mpn", "oem", "oe number"):
+        return "mpn"
+    return ""
+
+
+def listing_facts(item):
+    """Price, shipping, and part identifiers eBay returned. Missing amounts stay unknown."""
+    item = item or {}
+    price_amount, price_currency = _money(item.get("price"))
+    shipping_amount = shipping_currency = None
+    for option in item.get("shippingOptions") or []:
+        if not isinstance(option, dict):
+            continue
+        amount, currency = _money(option.get("shippingCost"))
+        if amount is not None:
+            shipping_amount, shipping_currency = amount, currency
+            break
+    product = item.get("product") if isinstance(item.get("product"), dict) else {}
+    identifiers = []
+    seen = set()
+    for value in product.get("mpns") or []:
+        _add_identifier(identifiers, seen, "mpn", value)
+    for value in product.get("gtins") or []:
+        _add_identifier(identifiers, seen, "gtin", value)
+    _add_identifier(identifiers, seen, "epid", product.get("epid"))
+    for aspect in product.get("aspects") or []:
+        if not isinstance(aspect, dict):
+            continue
+        kind = _aspect_kind(aspect.get("localizedName") or aspect.get("name"))
+        if not kind:
+            continue
+        values = aspect.get("localizedValues") or aspect.get("values") or []
+        for value in values:
+            _add_identifier(identifiers, seen, kind, value)
+    return {
+        "item_id": str(item.get("itemId") or "").strip(),
+        "price_amount": price_amount,
+        "price_currency": price_currency,
+        "shipping_amount": shipping_amount,
+        "shipping_currency": shipping_currency,
+        "item_country": _country(item.get("itemLocation")),
+        "identifiers": identifiers,
+    }
+
+
 def price_filter(max_price):
     if max_price in (None, ""):
         return None
@@ -120,6 +201,7 @@ class EbayBrowseClient:
             "category_ids": PARTS_CATEGORY,
             "limit": limit,
             "sort": "price",
+            "fieldgroups": "PRODUCT",
         }
         price = price_filter(max_price)
         if price:

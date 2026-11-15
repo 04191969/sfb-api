@@ -7,7 +7,7 @@ import django
 
 django.setup()
 
-from sfb_api.api.ebay_client import EbayNotConfigured
+from sfb_api.api.ebay_client import EbayNotConfigured, listing_facts
 from sfb_api.api.listing_find import find_listings
 from sfb_api.api.listing_sources import (
     CL_CITIES,
@@ -46,8 +46,10 @@ class SourceListTests(unittest.TestCase):
         self.assertNotIn("lkq", ids)
         self.assertEqual(
             {row["id"] for row in unavailable_sources()},
-            {"facebook", "lkq"},
+            {"facebook", "lkq", "carpart", "row52"},
         )
+        self.assertNotIn("carpart", ids)
+        self.assertNotIn("row52", ids)
 
     def test_the_named_sites_are_available(self):
         ids = {row["id"] for row in accessible_sources()}
@@ -55,7 +57,7 @@ class SourceListTests(unittest.TestCase):
             "ebay", "oldcarsdata", "rockauto", "craigslist", "reddit", "rennlist",
             "thesamba", "pelicanparts", "bimmerforums", "ferrarichat",
             "jaglovers", "landroverforums", "hemmings", "bringatrailer",
-            "forabodiesonly", "grassrootsmotorsports", "carpart", "row52",
+            "forabodiesonly", "grassrootsmotorsports",
         ):
             self.assertIn(source_id, ids)
 
@@ -307,6 +309,73 @@ class FindTests(unittest.TestCase):
         self.assertEqual(ebay.limit, 20)
         self.assertEqual(len(ebay_rows), 20)
 
+    def test_a_source_price_survives_a_blank_reader_price(self):
+        facts = listing_facts({
+            "itemId": "v1|99|0",
+            "price": {"value": "42.00", "currency": "USD"},
+            "shippingOptions": [
+                {"shippingCostType": "CALCULATED"},
+                {"shippingCostType": "FIXED", "shippingCost": {"value": "8.50", "currency": "USD"}},
+            ],
+            "product": {
+                "mpns": ["99906705309"],
+                "epid": "123",
+                "aspects": [{"localizedName": "Interchange Part Number", "localizedValues": ["9A700758500"]}],
+            },
+        })
+        self.assertEqual(facts["price_amount"], "42.00")
+        self.assertIsNone(listing_facts({})["price_amount"])
+        self.assertIsNone(listing_facts({"shippingOptions": [{"shippingCostType": "CALCULATED"}]})["shipping_amount"])
+
+        class Ebay:
+            def search_parts(self, _query, limit=10):
+                return [{
+                    "title": "Genuine Porsche caliper bolt",
+                    "itemWebUrl": "https://www.ebay.com/itm/99",
+                    "itemId": facts["item_id"],
+                    "price": {"value": facts["price_amount"], "currency": "USD"},
+                    "shippingOptions": [{"shippingCost": {"value": "8.50", "currency": "USD"}}],
+                    "product": {"mpns": ["99906705309"], "epid": "123"},
+                }]
+
+        def read(_raw, _vehicle):
+            return [{
+                "part_name": "Caliper bolt",
+                "oem_number": "Not listed",
+                "price": "Not listed",
+                "condition": "Used",
+                "fitment_vehicles": ["Porsche 911"],
+                "source": "ebay",
+                "link": "https://www.ebay.com/itm/99",
+            }]
+
+        def get_status(url, **_kwargs):
+            class Response:
+                status_code = 200
+                text = ""
+                headers = {}
+
+            return Response()
+
+        found = find_listings(
+            "caliper",
+            make="Porsche",
+            ebay=Ebay(),
+            old_cars=lambda _text: [],
+            get=get_status,
+            pause=lambda _seconds: None,
+            read=read,
+        )
+        row = found["reader"][0]
+        self.assertEqual(row["price"], "42.00 USD")
+        self.assertEqual(row["price_amount"], "42.00")
+        self.assertEqual(row["shipping_amount"], "8.50")
+        self.assertEqual(row["oem_number"], "99906705309")
+        self.assertEqual(row["item_id"], "v1|99|0")
+        stored = found["listings"][0]
+        self.assertEqual(stored["price_amount"], "42.00")
+        self.assertIsNotNone(stored["identifiers"])
+
     def test_shared_sites_run_for_a_make_that_fills_the_forum_cap(self):
         called = []
 
@@ -320,9 +389,9 @@ class FindTests(unittest.TestCase):
                     self.status_code = 200
                     self.text = body
 
-            if "site%3Acar-part.com" in url:
+            if "site%3Ahemmings.com" in url:
                 return Response(
-                    '<a href="https://www.car-part.com/caliper">brake caliper for sale</a>'
+                    '<a href="https://www.hemmings.com/classifieds/caliper">brake caliper for sale</a>'
                 )
             return Response("")
 
@@ -336,7 +405,9 @@ class FindTests(unittest.TestCase):
             read=lambda _raw, _vehicle: None,
         )
         brave = [url for url in called if "search.brave.com" in url]
-        for domain in ("car-part.com", "row52.com", "hemmings.com", "bringatrailer.com"):
+        for domain in ("hemmings.com", "bringatrailer.com"):
             self.assertTrue(any(domain in url for url in brave), domain)
-        self.assertTrue(any(row.get("site") == "car-part.com" for row in found["listings"]))
+        for domain in ("car-part.com", "row52.com"):
+            self.assertFalse(any(domain in url for url in brave), domain)
+        self.assertTrue(any(row.get("site") == "hemmings.com" for row in found["listings"]))
         self.assertLessEqual(sum("rennlist.com" in url or "pelicanparts.com" in url or "planet-9.com" in url or "flatsixes.com" in url for url in brave), 4)
