@@ -703,6 +703,29 @@ class ProductIntentTests(unittest.TestCase):
             "title": "WTB: Two Polk RT35i speakers",
         })
         self.assertIn("looking for two RT35i speakers", direct["text"])
+        item_id = "1368287185279175"
+        facebook_url = f"https://www.facebook.com/marketplace/item/{item_id}/"
+        page = (
+            "<html><body><h1>Barudan Profit 902T 2-Head Embroidery Machine</h1>"
+            "<p>Facebook Marketplace. Location Natick, Massachusetts.</p>"
+            f"<span>{item_id}</span>"
+            + (" Marketplace listing. " * 12)
+            + "</body></html>"
+        )
+        facebook = self.worker["inspect_listing_html"](page, "Barudan Profit 902T", facebook_url)
+        self.assertEqual(facebook["status"], "available")
+        ended = page.replace("</body>", "<p>This listing is no longer available</p></body>")
+        self.assertEqual(
+            self.worker["inspect_listing_html"](ended, "Barudan Profit 902T", facebook_url)["status"],
+            "ended",
+        )
+        self.assertEqual(
+            self.worker["classify_availability"]("Sep 18, 2026 · This is a vintage Greco SE600"),
+            "unconfirmed",
+        )
+        wanted = self.worker["wtb_search_query"]("Barudan Profit 902T")
+        for term in ("WTB", "want to buy", "looking for", "looking to buy", "in search of", "WTB ad"):
+            self.assertIn(term, wanted)
         item = self.worker["public_post_roles"]({
             "title": "WTB Epiphone USA Map",
             "text": GENUINE_WTB,
@@ -717,6 +740,75 @@ class ProductIntentTests(unittest.TestCase):
             "platform": "web",
         }, "Epiphone USA Map")
         self.assertIsNone(unrelated)
+
+    def test_classified_ad_is_listed_from_its_own_text(self):
+        worker = self.worker
+        ad = "https://boston.craigslist.org/gbs/msg/d/boston-fender-strat/7890123456.html"
+        self.assertTrue(worker["is_item_page"](ad))
+        self.assertTrue(worker["is_classified_ad"](
+            "https://www.craigslist.org/view/d/las-vegas-fender-guitar-with-gig-bag/6UCfR1kLozwWdycLHj7woj"
+        ))
+        self.assertFalse(worker["is_item_page"]("https://boston.craigslist.org/search/msa?query=fender"))
+        self.assertTrue(worker["is_classified_ad"](
+            "https://www.audiogon.com/listings/amplifiers-mcintosh-mc275-2016-06-15-other-1234567"
+        ))
+        self.assertTrue(worker["is_classified_ad"](
+            "https://www.audiogon.com/listings/lisbdjje-mcintosh-mc-250-solid-state"
+        ))
+        self.assertFalse(worker["is_item_page"]("https://www.audiogon.com/listings/amplifiers"))
+        pelican = "https://forums.pelicanparts.com/porsche-911-used-parts-sale/1045123-fs-carrera-parts.html"
+        self.assertTrue(worker["is_classified_ad"](pelican))
+        self.assertEqual(
+            worker["canonical_item_url"]("https://forums.pelicanparts.com/showthread.php?t=1045123&sid=abc"),
+            "https://forums.pelicanparts.com/showthread.php?t=1045123",
+        )
+        pad = " Fender Stratocaster listing detail." * 8
+        page = (
+            "<html><body><nav>Home for sale categories</nav>"
+            "<article><h1>Fender Stratocaster</h1>"
+            "<p>For sale. Asking $900. Email the seller. Located in Boston, MA.</p></article>"
+            "<div class=\"reply\">Reply: this one has been sold. For sale $100.</div>"
+            + pad + "</body></html>"
+        )
+        listed = worker["inspect_listing_html"](page, "Fender Stratocaster", ad)
+        self.assertEqual(listed["status"], "available")
+        self.assertEqual(listed["evidence"], "classified_ad")
+        self.assertNotIn("has been sold", listed["text"].lower())
+        self.assertTrue(worker["availability_label"]("available", "classified_ad", listed["checked_at"]).startswith("Listed for sale—checked "))
+        self.assertEqual(worker["availability_label"]("available", "current_offer"), "Found for sale")
+        expired = page.replace("For sale. Asking $900.", "For sale. Asking $900. This posting has expired.")
+        self.assertEqual(worker["inspect_listing_html"](expired, "Fender Stratocaster", ad)["status"], "ended")
+        bare = (
+            "<html><body><article><p>$900 Fender Stratocaster.</p></article>"
+            + pad + "</body></html>"
+        )
+        self.assertEqual(worker["inspect_listing_html"](bare, "Fender Stratocaster", ad)["status"], "unconfirmed")
+        pelican = "https://forums.pelicanparts.com/porsche-cars-sale/1196688-2-944-sale.html"
+        forum_page = (
+            "<html><body><nav>Porsche Cars For Sale</nav>"
+            "<div id=\"post_message_1\">Asking $1500. PM me. 944 parts.</div>"
+            "<div id=\"post_message_2\">This one has been sold.</div>"
+            + pad + "</body></html>"
+        )
+        forum = worker["inspect_listing_html"](forum_page, "944", pelican)
+        self.assertEqual(forum["status"], "available")
+        self.assertNotIn("has been sold", forum["text"].lower())
+        skipped = []
+        seeds = worker["listing_seeds"]([
+            {"href": "https://en.wikipedia.org/wiki/Fender", "title": "Fender", "body": ""},
+            {"href": ad, "title": "Fender for sale", "body": "$900"},
+        ], 5, skipped)
+        self.assertEqual(seeds[0]["url"], ad)
+        self.assertEqual(skipped[0]["reason"], "host is not a listing source")
+        over_budget = worker["qualifies"]({
+            "title": "Fender Stratocaster",
+            "text": listed["text"],
+            "availability": "available",
+            "price": 900,
+            "shipping": None,
+            "location": "Boston, MA",
+        }, "Looking for: Fender Stratocaster\nBudget: 850 plus shipping — firm maximum")
+        self.assertFalse(over_budget)
 
     def _item_html(self):
         pad = "Epiphone USA Map guitar reissue in stock. " * 8

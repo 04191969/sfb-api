@@ -389,7 +389,20 @@ def search_wtb_posts(query, seen, max_results=15):
 LISTING_QUERIES = (
     "{query} for sale",
     "{query} (site:ebay.com/itm OR site:reverb.com OR site:craigslist.org OR site:mercari.com OR site:offerup.com OR site:etsy.com OR site:amazon.com)",
-    "{query} (site:pelicanparts.com OR site:bringatrailer.com OR site:carsandbids.com OR site:audiogon.com OR site:shopgoodwill.com OR site:facebook.com/marketplace)",
+    "{query} (site:pelicanparts.com OR site:bringatrailer.com OR site:carsandbids.com OR site:audiogon.com OR site:shopgoodwill.com)",
+    "{query} site:facebook.com/marketplace/item",
+)
+WTB_TERMS = (
+    "WTB",
+    '"want to buy"',
+    '"wanted to buy"',
+    '"willing to buy"',
+    '"looking to buy"',
+    '"looking for"',
+    '"in search of"',
+    "ISO",
+    '"WTB ad"',
+    '"wanted ad"',
 )
 
 SKIP_LISTING_HOSTS = (
@@ -399,25 +412,82 @@ SKIP_LISTING_HOSTS = (
 )
 
 
+def wtb_search_query(item):
+    """Wanted ads. The same request is written WTB, want to buy, looking for, and the rest."""
+    terms = " OR ".join(WTB_TERMS)
+    return f"\"{item}\" ({terms})"
+
+
 def facebook_item_url(url):
     """A direct Marketplace item page. A profile is not one of these."""
     return bool(re.search(r"facebook\.com/marketplace/item/\d+", (url or "").lower()))
+
+
+def facebook_item_id(url):
+    found = re.search(r"facebook\.com/marketplace/item/(\d+)", (url or "").lower())
+    return found.group(1) if found else ""
 
 
 def facebook_profile_url(url):
     return bool(re.search(r"facebook\.com/marketplace/profile/\d+", (url or "").lower()))
 
 
-def listing_allowed(url, title, body):
+BOARD_HOSTS = (
+    "pelicanparts.com", "rennlist.com", "usaudiomart.com", "canuckaudiomart.com",
+    "head-fi.org", "thegearpage.net", "talkbass.com", "fredmiranda.com",
+)
+CLASSIFIED_CLOSED = (
+    "marked as sold",
+    "listing withdrawn",
+    "ad withdrawn",
+    "post withdrawn",
+    "posting withdrawn",
+    "listing expired",
+    "posting has expired",
+    "ad has expired",
+    "this ad has expired",
+    "no longer for sale",
+    "posting has been deleted",
+)
+CLASSIFIED_SOLD = re.compile(
+    r"(?i)\b(?:this|the listing|the ad|the posting|it)\b.{0,30}\bhas been sold\b"
+)
+SALE_WORDING = re.compile(
+    r"(?i)(?:\bfor sale\b|\bfs\s*:|\bwts\b|\bselling\b|\basking\b|\bobo\b|\bor best offer\b)"
+)
+PRICE_DETAIL = re.compile(r"\$\s*\d")
+CONTACT_DETAIL = re.compile(
+    r"(?i)(?:\bcontact\b|\be-?mail\b|\bpm me\b|\bmessage me\b|\btext me\b|\bcall me\b|\bphone\b|\breply to\b|\bsend a message\b)"
+)
+_CHROME_TAG = re.compile(r"(?is)<(script|style|noscript|nav|header|footer|aside)\b[^>]*>.*?</\1>")
+_CHROME_BLOCK = re.compile(
+    r"(?is)<(div|section|ul|ol|li|article)\b[^>]*(?:class|id)=['\"][^'\"]*"
+    r"(?:comment|reply|replies|related|similar|recommended|breadcrumb|sidebar|pagination)[^'\"]*['\"][^>]*>.*?</\1>"
+)
+
+
+def listing_block_reason(url, title, body):
+    """Why this search result is not opened. An empty reason means it can be read."""
     url_l = (url or "").lower()
-    if "facebook.com" in url_l:
-        return facebook_item_url(url) or facebook_profile_url(url)
+    if "facebook.com" in url_l and not (facebook_item_url(url) or facebook_profile_url(url)):
+        return "Facebook page is not an item or seller profile"
     if any(host in url_l for host in SKIP_LISTING_HOSTS):
-        return False
+        return "host is not a listing source"
     blob = f"{title} {body}".lower()
-    if any(token in url_l for token in ("/forum", "/forums", "rennlist.com")):
-        return any(word in blob for word in ("for sale", "fs:", "wts", "selling", "$"))
-    return True
+    if any(token in url_l for token in ("/forum", "/forums", "rennlist.com", "pelicanparts.com")):
+        if not any(word in blob for word in ("for sale", "fs:", "wts", "selling", "$")):
+            return "forum result has no sale wording"
+    return ""
+
+
+def listing_allowed(url, title, body):
+    return listing_block_reason(url, title, body) == ""
+
+
+def _note_skip(skipped, url, reason):
+    if skipped is None or not url or not reason:
+        return
+    skipped.append({"url": url, "reason": reason})
 
 
 def _url_path(url):
@@ -440,10 +510,37 @@ def is_catalog_page(url):
     ))
 
 
+def _forum_ad(url, path):
+    """One forum thread. A board index is not an ad."""
+    if re.search(r"[?&](?:t|tid|topic|thread|p)=\d{3,}", url or ""):
+        return True
+    if re.search(r"/(?:threads|thread|topic|showthread)/", path) and re.search(r"\d{4,}", path):
+        return True
+    return bool(re.search(r"/\d{5,}[^/]*$", path))
+
+
+def is_classified_ad(url):
+    """One Craigslist, Audiogon, Pelican, or similar ad. A search or category page is not one."""
+    if is_catalog_page(url):
+        return False
+    url_l = (url or "").lower()
+    path = _url_path(url)
+    if "craigslist.org" in url_l or re.search(r"/d/.+/\d{5,}\.html$", path) or "/view/d/" in path:
+        return bool(re.search(r"/d/.+/\d{5,}\.html$", path) or re.search(r"/view/d/.+/.+", path))
+    if "audiogon.com" in url_l:
+        return bool(re.search(r"/listings/lis[a-z0-9]+-", path) or re.search(r"/listings/.+-\d{5,}$", path))
+    if any(host in url_l for host in ("usaudiomart.com", "canuckaudiomart.com")):
+        return bool(re.search(r"/details/\d{4,}", path))
+    board = any(host in url_l for host in BOARD_HOSTS) or "/forum" in url_l or "/forums" in url_l
+    return bool(board and _forum_ad(url_l, path))
+
+
 def is_item_page(url):
     """One seller's listing. A product or search page is not one."""
     if is_catalog_page(url):
         return False
+    if is_classified_ad(url):
+        return True
     url_l = (url or "").lower()
     return any(token in url_l for token in ("/itm/", "/listing/", "/item/", "/marketplace/item"))
 
@@ -471,8 +568,11 @@ CURRENT_OFFER_MARKS = (
 )
 
 
-def availability_label(status):
-    """Found for sale requires a page that still offers the item."""
+def availability_label(status, evidence="", checked_at=""):
+    """A checkout or bid is seller-confirmed. An open ad records when it was checked."""
+    if status == "available" and evidence in ("classified_ad", "facebook_item"):
+        when = checked_at or "the page was read"
+        return f"Listed for sale—checked {when}"
     if status == "available":
         return "Found for sale"
     if status == "ended":
@@ -509,6 +609,59 @@ def classify_availability(page_text):
     if any(mark in text for mark in CURRENT_OFFER_MARKS):
         return "available"
     return "unconfirmed"
+
+
+def opened_facebook_listing(html, page_url):
+    """A Marketplace item page names its own item. It does not say buy it now."""
+    item_id = facebook_item_id(page_url)
+    if not item_id or item_id not in (html or ""):
+        return False
+    text = " ".join(plain_page_text(html).lower().split())
+    return "marketplace" in text
+
+
+def _first_post(html):
+    """The opening post. Later replies are not the ad."""
+    match = re.search(r"(?is)id=[\"']post_message_\d+[\"'][^>]*>(.*)", html or "")
+    if not match:
+        return ""
+    chunk = match.group(1)
+    stop = re.search(r"(?is)id=[\"']post_message_\d+|__________________", chunk)
+    if stop:
+        chunk = chunk[:stop.start()]
+    return plain_page_text(chunk)
+
+
+def listing_prose(html):
+    """The ad itself. Navigation, replies, and related listings are not the offer."""
+    post = _first_post(html)
+    if post:
+        return post
+    cleaned = _CHROME_TAG.sub(" ", html or "")
+    cleaned = _CHROME_BLOCK.sub(" ", cleaned)
+    return plain_page_text(excise_similar_sections(cleaned))
+
+
+def classified_closed(text):
+    """Sold, withdrawn, expired, or ended closes the ad. Missing sold does not open it."""
+    if classify_availability(text) == "ended":
+        return True
+    sample = " ".join((text or "").lower().split())
+    if CLASSIFIED_SOLD.search(sample):
+        return True
+    return any(mark in sample for mark in CLASSIFIED_CLOSED)
+
+
+def classified_signals(text):
+    """The ad offers the item: sale wording, plus a price or a way to contact the seller."""
+    sample = text or ""
+    if not SALE_WORDING.search(sample):
+        return False
+    return bool(PRICE_DETAIL.search(sample) or CONTACT_DETAIL.search(sample))
+
+
+def _checked_now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def model_codes(query):
@@ -556,6 +709,18 @@ def page_unreadable(html):
     return False
 
 
+def _thread_query(query):
+    """Keep the thread id. Tracking parameters are not part of the ad."""
+    kept = []
+    for part in (query or "").split("&"):
+        if "=" not in part:
+            continue
+        name, value = part.split("=", 1)
+        if name.lower() in ("t", "tid", "topic", "thread", "p") and value.isdigit():
+            kept.append(f"{name.lower()}={value}")
+    return "&".join(kept)
+
+
 def canonical_item_url(url, base=""):
     """Direct item path. Tracking query parameters are not part of the item."""
     raw = unescape(url or "").strip()
@@ -565,9 +730,11 @@ def canonical_item_url(url, base=""):
         host = urlsplit(base)
         raw = f"{host.scheme}://{host.netloc}{raw}"
     parts = urlsplit(raw)
-    if not parts.scheme or not parts.netloc or not is_item_page(parts.path):
+    query = _thread_query(parts.query)
+    identity = urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+    if not parts.scheme or not parts.netloc or not is_item_page(identity):
         return ""
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    return identity
 
 
 def similar_sections(html):
@@ -704,21 +871,51 @@ def inspect_listing_html(html, query, page_url):
             "price": None,
             "shipping": None,
             "readable": False,
+            "evidence": "",
+            "checked_at": "",
         }
-    main_text = plain_page_text(excise_similar_sections(html))
+    if is_classified_ad(page_url):
+        main_text = listing_prose(html)
+    else:
+        main_text = plain_page_text(excise_similar_sections(html))
     price, shipping = structured_offer(html, page_url)
     # A crossed-out original price is not the price the seller is asking now.
     visible = current_asking_price(main_text)
     if visible is not None:
         price = visible
+    evidence = ""
+    checked_at = ""
+    if is_classified_ad(page_url):
+        button_status = classify_availability(main_text)
+        if button_status == "ended" or classified_closed(main_text):
+            status = "ended"
+        elif button_status == "available":
+            status = "available"
+            evidence = "current_offer"
+        elif classified_signals(main_text):
+            status = "available"
+            evidence = "classified_ad"
+            checked_at = _checked_now()
+        else:
+            status = "unconfirmed"
+    else:
+        status = classify_availability(main_text)
+        if status == "available":
+            evidence = "current_offer"
+        elif status == "unconfirmed" and opened_facebook_listing(html, page_url):
+            status = "available"
+            evidence = "facebook_item"
+            checked_at = _checked_now()
     return {
-        "status": classify_availability(main_text),
+        "status": status,
         "text": main_text,
         "location": stated_location(main_text),
         "similar": similar_item_links(html, query, page_url),
         "price": price,
         "shipping": shipping,
         "readable": True,
+        "evidence": evidence,
+        "checked_at": checked_at,
     }
 
 
@@ -1004,23 +1201,37 @@ def resolve_facebook_profile(profile_url, request_text, excerpt, read_html, read
         return unresolved_profile(profile_url)
     card, hits = chosen
     item_body = read_item(card["url"]) if card.get("url") else ""
-    page_text = plain_page_text(item_body) if "<" in (item_body or "")[:300] else (item_body or "")
-    if not same_item_page(page_text, hits):
-        return unresolved_profile(profile_url)
-    status = classify_availability(page_text)
+    evidence = ""
+    checked_at = ""
+    if "<" in (item_body or "")[:500]:
+        info = inspect_listing_html(item_body, request_text, card["url"])
+        if not info["readable"] or not same_item_page(info["text"], hits):
+            return unresolved_profile(profile_url)
+        page_text = info["text"]
+        status = info["status"]
+        evidence = info.get("evidence") or ""
+        checked_at = info.get("checked_at") or ""
+    else:
+        page_text = item_body or ""
+        if not same_item_page(page_text, hits):
+            return unresolved_profile(profile_url)
+        status = classify_availability(page_text)
     return {
         "url": card["url"],
         "discovery_url": profile_url,
         "resolved": True,
         "page_text": page_text,
         "availability": status,
+        "evidence": evidence,
+        "checked_at": checked_at,
         "link_label": "View item",
         "keep_ended": status == "ended",
     }
 
 
-def listing_record(title, body, url, page_text, status, location, discovery_url="", link_label=""):
-    evidence = "listing_page" if page_text else "search_excerpt"
+def listing_record(title, body, url, page_text, status, location, discovery_url="", link_label="", evidence="", checked_at=""):
+    if not evidence:
+        evidence = "listing_page" if page_text else "search_excerpt"
     return {
         "title": title,
         "text": f"{title}\n{body}",
@@ -1035,6 +1246,7 @@ def listing_record(title, body, url, page_text, status, location, discovery_url=
         "page_text": page_text,
         "availability": status,
         "availability_evidence": evidence,
+        "checked_at": checked_at or "",
         "location": location or "",
     }
 
@@ -1076,7 +1288,7 @@ def _queue_similar(queue, inspected, links, discovery, item_query):
         queue.insert(index, item)
 
 
-def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="", target=MATCH_TARGET):
+def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="", target=MATCH_TARGET, skipped=None):
     """Keep opening pages until a qualifying offer is found, or the page budget is used."""
     request = buyer_text or query
     item_query = requested_item(request)
@@ -1114,6 +1326,7 @@ def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="
                 title, body, resolved["url"], resolved["page_text"], status,
                 stated_location(resolved["page_text"]),
                 resolved["discovery_url"], resolved["link_label"],
+                resolved.get("evidence") or "", resolved.get("checked_at") or "",
             )
             record["qualifying"] = qualifies(record, request)
             if record["qualifying"]:
@@ -1124,26 +1337,31 @@ def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="
         if is_catalog_page(url):
             html = fetch_html(url)
             opened += 1
+            _note_skip(skipped, url, "catalog page opened as a source, not an offer")
             links = []
             if not page_unreadable(html):
                 links = catalog_offer_links(html, item_query, url)
             _queue_similar(queue, inspected, links, url, item_query)
             continue
         if not is_item_page(url):
+            _note_skip(skipped, url, "not an individual listing URL")
             continue
         info = inspect_listing_html(fetch_html(url), item_query, url)
         described = f"{title}\n{body}\n{info['text']}"
         matches = text_has_model(described, item_query)
         if not info["readable"]:
+            _note_skip(skipped, url, "page unreadable")
             if matches:
                 _queue_similar(queue, inspected, info["similar"], url, item_query)
             continue
         opened += 1
         if info["status"] == "ended":
+            _note_skip(skipped, url, "listing closed")
             if matches:
                 _queue_similar(queue, inspected, info["similar"], url, item_query)
             continue
         if not matches:
+            _note_skip(skipped, url, "opened page did not offer the requested item")
             continue
         record = listing_record(
             title or info["text"][:180],
@@ -1154,6 +1372,8 @@ def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="
             info["location"],
             discovery,
             "View item",
+            info.get("evidence") or "",
+            info.get("checked_at") or "",
         )
         if info.get("price") is not None:
             record["price"] = info["price"]
@@ -1171,7 +1391,7 @@ def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="
     return unique_offers(qualifying + rejected), incomplete
 
 
-def listing_seeds(rows, limit):
+def listing_seeds(rows, limit, skipped=None):
     """Item pages only. A category or article does not take a candidate slot."""
     seeds = []
     seen_urls = set()
@@ -1182,9 +1402,12 @@ def listing_seeds(rows, limit):
         direct = canonical_item_url(url) or url
         if not url or direct in seen_urls:
             continue
-        if not listing_allowed(url, title, body):
+        blocked = listing_block_reason(url, title, body)
+        if blocked:
+            _note_skip(skipped, direct, blocked)
             continue
         if not (is_item_page(direct) or facebook_profile_url(direct) or is_catalog_page(direct)):
+            _note_skip(skipped, direct, "not an individual listing URL")
             continue
         seen_urls.add(direct)
         seeds.append({"url": direct, "title": title, "body": body})
@@ -1198,10 +1421,11 @@ def search_listings(query, seen, max_keep=8, buyer_text=""):
     request = buyer_text or query
     item_query = requested_item(request)
     groups = []
+    skipped = []
     for template in LISTING_QUERIES:
         search_text = template.format(query=item_query)
         print(f"    Listing search: {search_text[:110]}")
-        groups.append(listing_seeds(ddg_text(search_text, max_results=10), PAGE_BUDGET))
+        groups.append(listing_seeds(ddg_text(search_text, max_results=10), PAGE_BUDGET, skipped))
         time.sleep(SEARCH_DELAY)
     seeds = []
     seen_urls = set()
@@ -1217,8 +1441,10 @@ def search_listings(query, seen, max_keep=8, buyer_text=""):
             seen_urls.add(seed["url"])
             seeds.append(seed)
     listings, incomplete = expand_candidates(
-        seeds, item_query, read_listing_html, PAGE_BUDGET, request, MATCH_TARGET,
+        seeds, item_query, read_listing_html, PAGE_BUDGET, request, MATCH_TARGET, skipped,
     )
+    for item in skipped:
+        print(f"    Skipped {item['url'][:140]} — {item['reason']}")
     listings = [
         item for item in listings
         if not (is_seen(seen, item.get("url") or "") and item.get("availability") != "available")
@@ -1226,7 +1452,7 @@ def search_listings(query, seen, max_keep=8, buyer_text=""):
     qualifying = [item for item in listings if item.get("qualifying")]
     others = [item for item in listings if not item.get("qualifying")]
     kept = flag_cross_posts((qualifying + others)[:max_keep])
-    return {"listings": kept, "incomplete": incomplete}
+    return {"listings": kept, "incomplete": incomplete, "skipped": skipped}
 
 
 def search_ebay_listings(query, seen, max_results=10):
@@ -1522,7 +1748,7 @@ def search_outcome(listings, incomplete=""):
     return "No qualifying match found in the sources checked"
 
 
-def assessment_text(availability, confidence, product_reason, location, item_price=None, buyer_text="", shipping=None):
+def assessment_text(availability, confidence, product_reason, location, item_price=None, buyer_text="", shipping=None, evidence="", checked_at=""):
     """A product match cannot override a failed price limit."""
     price = price_against_budget(item_price, buyer_price_cap(buyer_text), shipping)
     product_ok = availability == "available" and confidence >= 60
@@ -1538,9 +1764,12 @@ def assessment_text(availability, confidence, product_reason, location, item_pri
         introduction = "Send"
     else:
         introduction = "on hold"
-    availability_value = "Found for sale" if availability == "available" else (
-        "Listing ended" if availability == "ended" else "unconfirmed"
-    )
+    if availability == "available":
+        availability_value = availability_label(availability, evidence, checked_at)
+    elif availability == "ended":
+        availability_value = "Listing ended"
+    else:
+        availability_value = "unconfirmed"
     limit_name = "delivered-price limit" if price.get("basis") == "delivered" else "item-price limit"
     if price["status"] == "over":
         budget_value = (
@@ -1619,12 +1848,15 @@ def push_match(sb, buyer, seller, match_result, section_id=None):
         if availability == "ended" and not seller.get("keep_ended"):
             print("    Ended listing excluded from active matches.")
             return None
-        label = availability_label(availability)
+        label = availability_label(
+            availability, seller.get("availability_evidence") or "", seller.get("checked_at") or "",
+        )
         place = seller.get("location") or "not stated on the listing"
         cross = seller.get("cross_post") or ""
         decision, reason = assessment_text(
             availability, confidence, reason, place,
             seller.get("price"), buyer.get("text") or "", seller.get("shipping"),
+            seller.get("availability_evidence") or "", seller.get("checked_at") or "",
         )
         if cross:
             reason = f"{reason} | Note: {cross}"
@@ -2442,6 +2674,8 @@ def refresh_stored_offer(seller, fetch_html):
         checked["qualifying"] = False
         return checked
     checked["availability"] = info.get("status") or "unconfirmed"
+    checked["availability_evidence"] = info.get("evidence") or ""
+    checked["checked_at"] = info.get("checked_at") or ""
     checked["price"] = info.get("price")
     checked["shipping"] = info.get("shipping")
     checked["text"] = info.get("text") or ""
@@ -2510,10 +2744,10 @@ def _remember_buyer(sb, market_id, post):
         None,
     )
     if match:
-        sb.table("buyer_posts").update({
-            "section_id": market_id,
-            "observed_at": observed,
-        }).eq("id", match["id"]).execute()
+        changes = {"observed_at": observed}
+        if market_id:
+            changes["section_id"] = market_id
+        sb.table("buyer_posts").update(changes).eq("id", match["id"]).execute()
         return match["id"]
     return _save_source(sb, "buyer_posts", post["url"], {
         "username": (post.get("title") or "unknown")[:80],
@@ -2555,7 +2789,7 @@ def run_market_discovery(sb, openai_client, seen, run):
         return
     buyers = []
     discovered_offers = []
-    for post in search_wtb_posts(f"\"{market_name}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
+    for post in search_wtb_posts(wtb_search_query(market_name), seen):
         if is_market_discovery_run({"search_query": post.get("text") or ""}):
             continue
         _take_public_post(sb, market_id, post, buyers, discovered_offers, seen, market_name)
@@ -2563,7 +2797,11 @@ def run_market_discovery(sb, openai_client, seen, run):
     sellers = found["listings"] + discovered_offers
     observed = datetime.now(timezone.utc).isoformat()
     for seller in sellers:
-        label = availability_label(seller.get("availability"))
+        label = availability_label(
+            seller.get("availability"),
+            seller.get("availability_evidence") or "",
+            seller.get("checked_at") or "",
+        )
         _save_source(sb, "seller_listings", seller["url"], {
             "username": (seller.get("title") or "unknown")[:80],
             "listing_text": f"{label}\n{seller.get('text') or ''}"[:5000],
@@ -2584,7 +2822,7 @@ def run_market_discovery(sb, openai_client, seen, run):
     if overflow and not incomplete:
         incomplete = "the buyer-search limit was reached before every offer was checked"
     for query in offer_queries:
-        for post in search_wtb_posts(f"\"{query}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
+        for post in search_wtb_posts(wtb_search_query(query), seen):
             if is_market_discovery_run({"search_query": post.get("text") or ""}):
                 continue
             _take_public_post(sb, market_id, post, buyers, sellers, seen, market_name)
@@ -2662,6 +2900,14 @@ def check_manual_requests(sb, openai_client, seen):
             print(f"    Search: {query}")
 
             print(f"    Searching listings for: {requested_item(query)}")
+            item = requested_item(query)
+            print(f"    Searching wanted ads for: {item}")
+            for post in search_wtb_posts(wtb_search_query(item), seen):
+                wanted, _offer = public_post_roles(post, item)
+                if not wanted:
+                    continue
+                _remember_buyer(sb, None, wanted)
+                print(f"    Wanted ad: {(wanted.get('url') or '')[:90]}")
             buyer = {
                 "title": requested_item(query)[:80],
                 "text": query if query.lower().startswith("item:") or "\nItem:" in query or query.lower().startswith("find sellers") else f"Looking for: {query}",
@@ -3446,6 +3692,172 @@ def check_rules():
         "title": "WTB: Two Polk RT35i speakers",
     })
     assert "looking for two RT35i speakers" in polk["text"]
+    item_id = "1368287185279175"
+    facebook_url = f"https://www.facebook.com/marketplace/item/{item_id}/"
+    facebook_page = (
+        "<html><body><h1>Barudan Profit 902T 2-Head Embroidery Machine</h1>"
+        "<p>Facebook Marketplace. Location Natick, Massachusetts.</p>"
+        f"<span>{item_id}</span>"
+        + (" Marketplace listing. " * 12)
+        + "</body></html>"
+    )
+    facebook = inspect_listing_html(facebook_page, "Barudan Profit 902T", facebook_url)
+    assert facebook["status"] == "available"
+    assert facebook["readable"] is True
+    assert qualifies({
+        "title": "Barudan Profit 902T 2-Head Embroidery Machine",
+        "text": facebook["text"],
+        "url": facebook_url,
+        "platform": "facebook",
+        "price": None,
+        "shipping": None,
+        "location": "Natick, MA",
+        "availability": facebook["status"],
+        "currency": "USD",
+    }, "Looking for: Barudan Profit 902T 2-Head Embroidery Machine") is True
+    ended_page = facebook_page.replace("</body>", "<p>This listing is no longer available</p></body>")
+    assert inspect_listing_html(ended_page, "Barudan Profit 902T", facebook_url)["status"] == "ended"
+    assert classify_availability("Sep 18, 2026 · This is a vintage Greco SE600") == "unconfirmed"
+    wanted_query = wtb_search_query("Barudan Profit 902T")
+    for term in ("WTB", "want to buy", "wanted to buy", "willing to buy", "looking to buy", "looking for", "in search of", "ISO", "WTB ad", "wanted ad"):
+        assert term in wanted_query
+    assert facebook["evidence"] == "facebook_item"
+    assert availability_label("available", facebook["evidence"], facebook["checked_at"]).startswith("Listed for sale—checked ")
+    assert availability_label("available", "current_offer") == "Found for sale"
+    craigslist_ad = "https://boston.craigslist.org/gbs/msg/d/boston-fender-strat/7890123456.html"
+    audiogon_ad = "https://www.audiogon.com/listings/amplifiers-mcintosh-mc275-2016-06-15-other-1234567"
+    pelican_ad = "https://forums.pelicanparts.com/porsche-911-used-parts-sale/1045123-fs-carrera-parts.html"
+    pelican_thread = "https://forums.pelicanparts.com/showthread.php?t=1045123&sid=abc"
+    assert is_classified_ad(craigslist_ad) is True
+    assert is_classified_ad("https://www.craigslist.org/view/d/las-vegas-fender-guitar-with-gig-bag/6UCfR1kLozwWdycLHj7woj") is True
+    assert is_item_page(craigslist_ad) is True
+    assert is_item_page("https://boston.craigslist.org/search/msa?query=fender") is False
+    assert is_classified_ad(audiogon_ad) is True
+    assert is_classified_ad("https://www.audiogon.com/listings/lisbdjje-mcintosh-mc-250-solid-state") is True
+    assert is_item_page("https://www.audiogon.com/listings/amplifiers") is False
+    assert is_classified_ad(pelican_ad) is True
+    assert is_item_page("https://forums.pelicanparts.com/porsche-911-used-parts-sale/") is False
+    assert canonical_item_url(pelican_thread) == "https://forums.pelicanparts.com/showthread.php?t=1045123"
+    pad = " Fender Stratocaster listing detail." * 8
+    classified_html = (
+        "<html><body><nav>Home for sale categories</nav>"
+        "<article><h1>Fender Stratocaster</h1>"
+        "<p>For sale. Asking $900. Email the seller or reply to this ad. Located in Boston, MA.</p></article>"
+        "<section class=\"related\">Related listings. Gibson for sale $500.</section>"
+        "<div class=\"reply\">Reply: this one has been sold.</div>"
+        + pad + "</body></html>"
+    )
+    classified = inspect_listing_html(classified_html, "Fender Stratocaster", craigslist_ad)
+    assert classified["status"] == "available"
+    assert classified["evidence"] == "classified_ad"
+    assert "gibson" not in classified["text"].lower()
+    assert "has been sold" not in classified["text"].lower()
+    assert availability_label("available", classified["evidence"], classified["checked_at"]).startswith("Listed for sale—checked ")
+    assert qualifies({
+        "title": "Fender Stratocaster",
+        "text": classified["text"],
+        "url": craigslist_ad,
+        "platform": "craigslist",
+        "price": 900,
+        "shipping": None,
+        "location": "Boston, MA",
+        "availability": classified["status"],
+        "currency": "USD",
+    }, "Looking for: Fender Stratocaster\nBudget: 850 plus shipping — firm maximum") is False
+    expired_html = classified_html.replace(
+        "For sale. Asking $900.",
+        "For sale. Asking $900. This posting has expired.",
+    )
+    assert inspect_listing_html(expired_html, "Fender Stratocaster", craigslist_ad)["status"] == "ended"
+    sold_html = classified_html.replace("For sale. Asking $900.", "For sale. Asking $900. This guitar has been sold.")
+    assert inspect_listing_html(sold_html, "Fender Stratocaster", craigslist_ad)["status"] == "ended"
+    part_sold = (
+        "<html><body><article><p>For sale. The working FI has been sold, everything else is there. Asking $750. PM me.</p></article>"
+        + pad + "</body></html>"
+    )
+    assert inspect_listing_html(part_sold, "914 motor", craigslist_ad)["status"] == "available"
+    bare_html = (
+        "<html><body><article><h1>Fender Stratocaster</h1>"
+        "<p>$900 in Boston.</p></article>" + pad + "</body></html>"
+    )
+    assert inspect_listing_html(bare_html, "Fender Stratocaster", craigslist_ad)["status"] == "unconfirmed"
+    reply_only = (
+        "<html><body><article><h1>Fender Stratocaster</h1><p>Nice guitar in Boston.</p></article>"
+        "<div class=\"reply\">For sale. Asking $900. Email me.</div>" + pad + "</body></html>"
+    )
+    assert inspect_listing_html(reply_only, "Fender Stratocaster", craigslist_ad)["status"] == "unconfirmed"
+    forum_html = (
+        "<html><body><nav>Porsche Cars For Sale</nav>"
+        "<div id=\"post_message_12708500\">No titles. Asking $1500.00 for both. PM me with any questions. Located just South of Pittsburgh PA.</div>"
+        "<div id=\"post_message_12708501\">Reply: this one has been sold. For sale $100.</div>"
+        + pad + "</body></html>"
+    )
+    forum = inspect_listing_html(forum_html, "944", pelican_ad)
+    assert forum["status"] == "available"
+    assert forum["evidence"] == "classified_ad"
+    assert "has been sold" not in forum["text"].lower()
+    assert "1500" in forum["text"]
+    forum_record = listing_record("944", forum["text"], pelican_ad, forum["text"], forum["status"], "", "", "", forum["evidence"], forum["checked_at"])
+    assert forum_record["price"] == 1500.0
+    chatter = forum_html.replace(
+        "No titles. Asking $1500.00 for both. PM me with any questions.",
+        "What oil should I use on a 944?",
+    )
+    assert inspect_listing_html(chatter, "944", pelican_ad)["status"] == "unconfirmed"
+    assert page_unreadable("short") is True
+    skipped = []
+    seeds = listing_seeds([
+        {"href": "https://www.example.com/news/fender-stratocaster-story", "title": "Fender story", "body": "an article"},
+        {"href": "https://boston.craigslist.org/search/msa?query=fender", "title": "fender", "body": ""},
+        {"href": "https://en.wikipedia.org/wiki/Fender_Stratocaster", "title": "Fender", "body": ""},
+        {"href": pelican_ad, "title": "What oil should I use?", "body": "discussion"},
+        {"href": craigslist_ad, "title": "Fender Stratocaster for sale", "body": "$900"},
+    ], 5, skipped)
+    assert any(row["url"] == craigslist_ad for row in seeds)
+    assert any("/search/" in row["url"] for row in seeds)
+    assert any(row["reason"] == "not an individual listing URL" for row in skipped)
+    assert any(row["reason"] == "host is not a listing source" for row in skipped)
+    assert any(row["reason"] == "forum result has no sale wording" for row in skipped)
+    shop_html = (
+        "<html><body><p>Buy it now. Add to cart. New Price $850. Epiphone USA Map guitar. Located in Austin, TX.</p>"
+        + (" Epiphone USA Map guitar. " * 8) + "</body></html>"
+    )
+    shop = inspect_listing_html(shop_html, "Epiphone USA Map guitar", "https://reverb.com/item/97393148-epiphone-usa-map")
+    assert shop["status"] == "available"
+    assert shop["evidence"] == "current_offer"
+    assert availability_label("available", shop["evidence"]) == "Found for sale"
+    assert qualifies({
+        "title": "Epiphone USA Map guitar",
+        "text": shop["text"],
+        "url": "https://reverb.com/item/97393148-epiphone-usa-map",
+        "platform": "reverb",
+        "price": shop["price"],
+        "shipping": 150,
+        "location": "Austin, TX",
+        "availability": shop["status"],
+        "currency": "USD",
+        "current_costs": True,
+    }, "Looking for: Epiphone USA Map guitar\nBudget: $850 plus shipping, firm maximum") is True
+    profile_item = "https://www.facebook.com/marketplace/item/333/"
+    profile_html = (
+        "<html><body><h1>1974 Greco se600 Stratocaster Vintage Patina</h1>"
+        "<p>Facebook Marketplace. $725 Dover, MA</p><span>333</span>"
+        + (" Marketplace listing. " * 12) + "</body></html>"
+    )
+    profile_cards = """
+        <a href="/marketplace/item/333/">1974 Greco se600 Stratocaster Vintage Patina $725 Dover</a>
+    """
+    via_profile = resolve_facebook_profile(
+        "https://www.facebook.com/marketplace/profile/1000/",
+        "Greco Se600 1974 natural",
+        "1974 Greco se600 Stratocaster Vintage Patina Dover",
+        lambda _url: profile_cards,
+        lambda _url: profile_html,
+    )
+    via_item = inspect_listing_html(profile_html, "Greco Se600 1974 natural", profile_item)
+    assert via_profile["resolved"] is True
+    assert via_profile["availability"] == via_item["status"] == "available"
+    assert via_profile["evidence"] == via_item["evidence"] == "facebook_item"
     print("availability rules ok")
 
 
