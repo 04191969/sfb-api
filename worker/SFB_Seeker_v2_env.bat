@@ -1815,19 +1815,50 @@ def author_statement(text):
     """Author wording. Quotes, navigation, and related listings are not the author."""
     raw = _RELATED_LISTINGS.sub(" ", text or "")
     raw = _QUOTED_TEXT.sub(" ", raw)
-    kept = [line for line in re.split(r"[\r\n]+", raw) if not _navigation_line(line)]
-    return " ".join(kept)
+    kept = [line.strip() for line in re.split(r"[\r\n]+", raw) if line.strip() and not _navigation_line(line)]
+    return "\n".join(kept)
 
 
 def _intent_clauses(text):
-    parts = re.split(r"(?<=[.!?])\s+|\s*;\s*", text or "")
+    parts = re.split(r"[\r\n]+|(?<=[.!?])\s+|\s*;\s*", text or "")
     return [part.strip() for part in parts if part.strip(" .")]
 
 
+_NEGATION_BEFORE = re.compile(
+    r"(?i)(?:\bnot\b|\bno\b|\bnever\b|\bwithout\b|\bno longer\b|\bnot currently\b|n't\b)"
+    r"(?:\s+\w+){0,4}\s*$"
+)
+
+
+def _negated_at(clause, start):
+    prefix = (clause or "")[max(0, start - 48):start]
+    return _NEGATION_BEFORE.search(prefix) is not None
+
+
+def _positive_buy(clause):
+    for match in _BUY_INTENT.finditer(clause or ""):
+        if re.search(r"(?i)\blooking for\b", match.group(0)) and _LOOKING_FOR_BUYER.search(clause or ""):
+            continue
+        if _negated_at(clause, match.start()):
+            continue
+        return True
+    return False
+
+
+def _positive_sell(clause):
+    buyer_hunt = _LOOKING_FOR_BUYER.search(clause or "")
+    if buyer_hunt and not _negated_at(clause, buyer_hunt.start()):
+        return True
+    for match in _SELL_INTENT.finditer(clause or ""):
+        if _negated_at(clause, match.start()):
+            continue
+        return True
+    return False
+
+
 def _clause_intent(clause):
-    buy_text = _LOOKING_FOR_BUYER.sub(" ", clause or "")
-    buying = bool(_BUY_INTENT.search(buy_text))
-    selling = bool(_SELL_INTENT.search(clause or "")) or bool(_LOOKING_FOR_BUYER.search(clause or ""))
+    buying = _positive_buy(clause)
+    selling = _positive_sell(clause)
     if buying and selling:
         return "mixed"
     if buying:
@@ -1838,31 +1869,83 @@ def _clause_intent(clause):
 
 
 def _split_mixed_clause(clause):
+    marks = []
+    for match in _BUY_INTENT.finditer(clause or ""):
+        if re.search(r"(?i)\blooking for\b", match.group(0)) and _LOOKING_FOR_BUYER.search(clause or ""):
+            continue
+        if not _negated_at(clause, match.start()):
+            marks.append((match.start(), "buy"))
+    buyer_hunt = _LOOKING_FOR_BUYER.search(clause or "")
+    if buyer_hunt and not _negated_at(clause, buyer_hunt.start()):
+        marks.append((buyer_hunt.start(), "sell"))
+    for match in _SELL_INTENT.finditer(clause or ""):
+        if not _negated_at(clause, match.start()):
+            marks.append((match.start(), "sell"))
+    marks.sort()
     buys, sells = [], []
-    for piece in re.split(r"\s+\b(?:but|and)\b\s+|,\s+", clause or "", flags=re.I):
-        kind = _clause_intent(piece)
+    if not marks:
+        return buys, sells
+    leading = (clause or "")[:marks[0][0]].strip(" ,;.")
+    for index, (start, kind) in enumerate(marks):
+        end = marks[index + 1][0] if index + 1 < len(marks) else len(clause or "")
+        piece = (clause or "")[start:end].strip(" ,;.")
+        if index == 0 and leading:
+            piece = f"{leading} {piece}".strip()
+        if not piece:
+            continue
         if kind == "buy":
-            buys.append(piece.strip())
-        elif kind == "sell":
-            sells.append(piece.strip())
+            buys.append(piece)
+        else:
+            sells.append(piece)
     return buys, sells
 
 
+def _join_clauses(parts):
+    return "\n".join(part.strip() for part in parts if part and part.strip()).strip()
+
+
 def author_intent(text, url=""):
-    """What the author is doing. A search query or product name is not enough."""
+    """What the author is doing. Requirements stay with that item. The source stays intact."""
     buys, sells = [], []
+    pending = []
+    side = ""
     for clause in _intent_clauses(author_statement(text)):
         kind = _clause_intent(clause)
         if kind == "mixed":
             part_buys, part_sells = _split_mixed_clause(clause)
-            buys.extend(part_buys)
-            sells.extend(part_sells)
-        elif kind == "buy":
+            if part_buys:
+                if not side:
+                    buys.extend(pending)
+                    pending = []
+                side = "buy"
+                buys.extend(part_buys)
+            if part_sells:
+                if not side and not part_buys:
+                    sells.extend(pending)
+                    pending = []
+                side = "sell"
+                sells.extend(part_sells)
+            continue
+        if kind == "buy":
+            if not side:
+                buys.extend(pending)
+                pending = []
+            side = "buy"
             buys.append(clause)
         elif kind == "sell":
+            if not side:
+                sells.extend(pending)
+                pending = []
+            side = "sell"
             sells.append(clause)
-    wanted = " ".join(part for part in buys if part).strip()
-    offered = " ".join(part for part in sells if part).strip()
+        elif side == "buy":
+            buys.append(clause)
+        elif side == "sell":
+            sells.append(clause)
+        else:
+            pending.append(clause)
+    wanted = _join_clauses(buys)
+    offered = _join_clauses(sells)
     if wanted and offered:
         role = "mixed"
     elif wanted:
@@ -1871,7 +1954,7 @@ def author_intent(text, url=""):
         role = "sell"
     else:
         role = "unresolved"
-    return {"role": role, "wanted": wanted, "offered": offered}
+    return {"role": role, "wanted": wanted, "offered": offered, "source": text or ""}
 
 
 def as_matching_buyer(buyer):
@@ -1886,21 +1969,25 @@ def as_matching_buyer(buyer):
     if intent["role"] not in ("buy", "mixed") or not intent["wanted"]:
         return None
     kept = dict(buyer)
+    kept["source_text"] = (buyer or {}).get("source_text") or (buyer or {}).get("text") or ""
     kept["text"] = intent["wanted"]
     return kept
 
 
 def public_post_roles(post):
     """Split a public page into a buyer request, a seller offer, neither, or both."""
-    intent = author_intent((post or {}).get("text") or "", (post or {}).get("url") or "")
+    original = (post or {}).get("text") or ""
+    intent = author_intent(original, (post or {}).get("url") or "")
     buyer = seller = None
     if intent["role"] in ("buy", "mixed") and intent["wanted"]:
         buyer = dict(post)
+        buyer["source_text"] = original
         buyer["text"] = intent["wanted"]
     if intent["role"] in ("sell", "mixed") and intent["offered"]:
         seller = {
             "title": intent["offered"][:80],
             "text": intent["offered"],
+            "source_text": original,
             "url": (post or {}).get("url") or "",
             "platform": (post or {}).get("platform") or "web",
             "availability": "unconfirmed",
@@ -2153,7 +2240,7 @@ def _remember_buyer(sb, market_id, post):
     observed = datetime.now(timezone.utc).isoformat()
     _save_source(sb, "buyer_posts", post["url"], {
         "username": (post.get("title") or "unknown")[:80],
-        "post_text": (post.get("text") or "")[:5000],
+        "post_text": (post.get("source_text") or post.get("text") or "")[:5000],
         "source_url": post["url"],
         "source_platform": post.get("platform") or "web",
         "source_id": source_identity(post["url"]),
@@ -2905,6 +2992,39 @@ def check_rules():
     assert mixed["role"] == "mixed"
     assert "Gibson" not in mixed["wanted"]
     assert "Epiphone USA Map" in mixed["wanted"]
+    buy_request = "\n".join((
+        "Looking to buy an Epiphone USA Map.",
+        "Budget: 850 plus shipping — firm maximum.",
+        "Requirements: Ohio",
+        "Condition: excellent",
+        "No relic.",
+        "Must include the original case.",
+    ))
+    buy_intent = author_intent(buy_request)
+    assert buy_intent["source"] == buy_request
+    assert "Budget: 850 plus shipping — firm maximum." in buy_intent["wanted"]
+    assert "Requirements: Ohio" in buy_intent["wanted"]
+    assert "Condition: excellent" in buy_intent["wanted"]
+    assert "No relic." in buy_intent["wanted"]
+    assert "Must include the original case." in buy_intent["wanted"]
+    assert buyer_price_cap(buy_intent["wanted"])["limit"] == 850
+    mixed_request = "\n".join((
+        "WTB Epiphone USA Map.",
+        "Budget: 850 plus shipping — firm maximum.",
+        "Must include the original case.",
+        "WTS Gibson Les Paul for sale.",
+        "Asking $2000 including shipping.",
+        "Requirements: Texas.",
+    ))
+    mixed_kept = author_intent(mixed_request)
+    assert mixed_kept["source"] == mixed_request
+    assert "Must include the original case." in mixed_kept["wanted"]
+    assert "plus shipping" in mixed_kept["wanted"]
+    assert "Gibson" not in mixed_kept["wanted"]
+    assert "including shipping" in mixed_kept["offered"]
+    assert "850" not in mixed_kept["offered"]
+    assert author_intent("Not looking to buy an Epiphone USA Map.")["role"] == "unresolved"
+    assert author_intent("I don't want to buy an Epiphone USA Map.")["role"] == "unresolved"
     misclassified = {"text": selling, "url": facebook, "platform": "facebook", "title": selling}
     assert market_comparisons([misclassified], [{"url": f"https://reverb.com/item/{i}", "text": "for sale"} for i in range(4)]) == []
     priced = dict(stale)

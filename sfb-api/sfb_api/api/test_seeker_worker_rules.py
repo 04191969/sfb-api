@@ -407,3 +407,145 @@ class BuyerIntentTests(unittest.TestCase):
             for number in range(4)
         ]
         self.assertEqual(self.worker["market_comparisons"]([record], sellers), [])
+
+    def test_reproduced_buy_request_keeps_requirements_and_source(self):
+        source = "\n".join((
+            "Looking to buy an Epiphone USA Map.",
+            "Budget: 850 plus shipping — firm maximum.",
+            "Requirements: Ohio",
+            "Condition: excellent",
+            "No relic.",
+        ))
+        intent = self.worker["author_intent"](source)
+        self.assertEqual(intent["role"], "buy")
+        self.assertEqual(intent["source"], source)
+        wanted = intent["wanted"]
+        self.assertIn("Budget: 850 plus shipping — firm maximum.", wanted)
+        self.assertIn("Requirements: Ohio", wanted)
+        self.assertIn("Condition: excellent", wanted)
+        self.assertIn("No relic.", wanted)
+        cap = self.worker["buyer_price_cap"](wanted)
+        self.assertEqual(cap["limit"], 850)
+        self.assertTrue(cap["plus_shipping"])
+        self.assertEqual(self.worker["required_location"](wanted), "Ohio")
+        self.assertEqual(self.worker["stated_condition"](wanted), "excellent")
+        listing = {
+            "availability": "available",
+            "price": 900,
+            "shipping": 25,
+            "title": "Epiphone USA Map",
+            "text": "excellent",
+            "location": "Ohio",
+        }
+        self.assertFalse(self.worker["qualifies"](listing, wanted))
+        listing["price"] = 800
+        self.assertTrue(self.worker["qualifies"](listing, wanted))
+        buyer, _offer = self.worker["public_post_roles"]({
+            "title": "WTB",
+            "text": source,
+            "url": "https://forum.example/requirements",
+            "platform": "web",
+        })
+        self.assertEqual(buyer["source_text"], source)
+        saved = {}
+
+        class Result:
+            def __init__(self, data):
+                self.data = data
+
+        class Query:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def insert(self, row):
+                self.parent.row = row
+                return self
+
+            def execute(self):
+                if getattr(self.parent, "row", None):
+                    return Result([{"id": "saved"}])
+                return Result([])
+
+        class Database:
+            def table(self, _name):
+                return Query(self)
+
+        database = Database()
+        self.worker["_remember_buyer"](database, "market-1", buyer)
+        self.assertEqual(database.row["post_text"], source)
+
+    def test_reproduced_mixed_post_keeps_each_items_requirements(self):
+        source = "\n".join((
+            "WTB Epiphone USA Map.",
+            "Budget: 850 plus shipping — firm maximum.",
+            "Requirements: Ohio",
+            "No relic.",
+            "WTS Gibson Les Paul for sale.",
+            "Asking $2000 including shipping.",
+            "Requirements: Texas.",
+        ))
+        intent = self.worker["author_intent"](source)
+        self.assertEqual(intent["role"], "mixed")
+        self.assertEqual(intent["source"], source)
+        self.assertIn("Epiphone USA Map", intent["wanted"])
+        self.assertIn("Budget: 850 plus shipping — firm maximum.", intent["wanted"])
+        self.assertIn("Requirements: Ohio", intent["wanted"])
+        self.assertIn("No relic.", intent["wanted"])
+        self.assertNotIn("Gibson", intent["wanted"])
+        self.assertNotIn("Texas", intent["wanted"])
+        self.assertNotIn("2000", intent["wanted"])
+        self.assertIn("Gibson Les Paul", intent["offered"])
+        self.assertIn("Asking $2000 including shipping.", intent["offered"])
+        self.assertIn("Requirements: Texas.", intent["offered"])
+        self.assertNotIn("850", intent["offered"])
+        self.assertNotIn("Ohio", intent["offered"])
+        self.assertNotIn("Epiphone", intent["offered"])
+        buyer = self.worker["as_matching_buyer"]({
+            "text": source,
+            "url": "https://forum.example/mixed-requirements",
+            "platform": "web",
+            "title": "mixed",
+        })
+        self.assertEqual(buyer["source_text"], source)
+        self.assertIn("plus shipping", buyer["text"])
+        self.assertNotIn("Gibson", buyer["text"])
+
+    def test_must_include_the_original_case_stays_with_the_wanted_item(self):
+        source = "\n".join((
+            "Looking to buy an Epiphone USA Map.",
+            "Must include the original case.",
+            "WTS Gibson Les Paul for sale.",
+            "Case sold separately.",
+        ))
+        intent = self.worker["author_intent"](source)
+        self.assertIn("Must include the original case.", intent["wanted"])
+        self.assertNotIn("Must include the original case.", intent["offered"])
+        self.assertNotIn("separately", intent["wanted"])
+        self.assertEqual(intent["source"], source)
+
+    def test_negated_buying_statement_does_not_establish_intent(self):
+        worker = self.worker
+        for statement in (
+            "Not looking to buy an Epiphone USA Map.",
+            "I am not WTB an Epiphone USA Map.",
+            "No longer looking for an Epiphone USA Map.",
+            "I don't want to buy an Epiphone USA Map.",
+        ):
+            intent = worker["author_intent"](statement)
+            self.assertEqual(intent["role"], "unresolved", statement)
+            self.assertEqual(intent["wanted"], "")
+            self.assertIsNone(worker["as_matching_buyer"]({
+                "text": statement,
+                "url": "https://forum.example/negated",
+                "platform": "web",
+            }))
+        denied = "Not looking to buy an Epiphone USA Map. Selling a rare piece of guitar history."
+        sale = worker["author_intent"](denied)
+        self.assertEqual(sale["role"], "sell")
+        self.assertEqual(sale["wanted"], "")
