@@ -1476,7 +1476,8 @@ def qualifies(listing, buyer_text):
         return False
     cap = buyer_price_cap(buyer_text)
     shipping = listing.get("shipping")
-    if shipping is None:
+    # A refreshed page's missing amount stays missing. Old listing text is not a current cost.
+    if shipping is None and not listing.get("current_costs"):
         shipping = extract_shipping(blob)
     price = price_against_budget(listing.get("price"), cap, shipping)
     return price["status"] in ("no_cap", "within")
@@ -1940,24 +1941,29 @@ def load_market_records(sb, market_id):
 
 
 def refresh_stored_offer(seller, fetch_html):
-    """Read the item page. An unreadable page stays unconfirmed."""
+    """Read the item page. Old amounts are history and are not the current cost."""
     checked = dict(seller)
     checked["stored"] = True
     checked["checked_now"] = True
+    checked["previous_price"] = seller.get("price")
+    checked["previous_shipping"] = seller.get("shipping")
+    checked["historical_text"] = seller.get("text") or ""
+    checked["price"] = None
+    checked["shipping"] = None
+    checked["current_costs"] = True
+    checked["text"] = ""
+    checked["page_text"] = ""
     url = seller.get("url") or ""
     html = fetch_html(url) if url else ""
-    info = inspect_listing_html(html, seller.get("title") or seller.get("text") or "", url)
+    info = inspect_listing_html(html, seller.get("title") or "", url)
     if not info.get("readable"):
         checked["availability"] = "unconfirmed"
         checked["qualifying"] = False
         return checked
     checked["availability"] = info.get("status") or "unconfirmed"
-    if info.get("price") is not None:
-        checked["price"] = info["price"]
-    if info.get("shipping") is not None:
-        checked["shipping"] = info["shipping"]
-    if info.get("text"):
-        checked["text"] = info["text"]
+    checked["price"] = info.get("price")
+    checked["shipping"] = info.get("shipping")
+    checked["text"] = info.get("text") or ""
     checked["qualifying"] = checked["availability"] == "available"
     return checked
 
@@ -1978,6 +1984,7 @@ def record_offer_observation(sb, seller):
         "availability": seller.get("availability") or "unconfirmed",
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "price": seller.get("price"),
+        "shipping": seller.get("shipping"),
     }).eq("source_url", seller["url"]).execute()
 
 
@@ -2723,6 +2730,21 @@ def check_rules():
     unreadable_offer = refresh_stored_offer(stale, lambda url: "nope")
     assert unreadable_offer["availability"] == "unconfirmed"
     assert unreadable_offer["qualifying"] is False
+    priced = dict(stale)
+    priced["price"] = 400
+    priced["shipping"] = 25
+    priced["text"] = "Found for sale. Epiphone USA Map guitar $400 + $25 shipping"
+    available_no_price = "<html><body>" + ("Buy it now. Add to cart. Epiphone USA Map guitar in stock. " * 8) + "</body></html>"
+    no_price = refresh_stored_offer(priced, lambda url: available_no_price)
+    assert no_price["price"] is None
+    assert no_price["previous_price"] == 400
+    assert qualifies(no_price, "Budget: 850 plus shipping — firm maximum") is False
+    available_no_shipping = "<html><body>" + ("Buy it now. Add to cart. New Price $800. Epiphone USA Map guitar. " * 8) + "</body></html>"
+    no_shipping = refresh_stored_offer(priced, lambda url: available_no_shipping)
+    assert no_shipping["price"] == 800
+    assert no_shipping["shipping"] is None
+    assert no_shipping["previous_shipping"] == 25
+    assert qualifies(no_shipping, "Budget: 900 including shipping — firm maximum") is False
     print("availability rules ok")
 
 

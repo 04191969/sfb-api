@@ -308,3 +308,33 @@ class MarketDiscoveryPathTests(unittest.TestCase):
         checked = worker["refresh_stored_offer"](stale, lambda url: "nope")
         self.assertEqual(checked["availability"], "unconfirmed")
         self.assertFalse(checked["qualifying"])
+
+    def test_unknown_current_price_or_shipping_does_not_qualify(self):
+        worker = self.worker
+        stale = worker["stored_seller"]({
+            "id": "seller-1",
+            "availability": "available",
+            "source_url": "https://shop.example/item/old",
+            "username": "Epiphone USA Map guitar $400 + $25 shipping",
+            "listing_text": "Found for sale\nEpiphone USA Map guitar $400 + $25 shipping",
+            "price": 400,
+            "shipping": 25,
+        })
+        available = "<html><body>" + (
+            "Buy it now. Add to cart. Epiphone USA Map guitar in stock. " * 8
+        ) + "</body></html>"
+        no_price = worker["refresh_stored_offer"](stale, lambda url: available)
+        self.assertIsNone(no_price["price"])
+        self.assertEqual(no_price["previous_price"], 400)
+        self.assertEqual(no_price["availability"], "available")
+        self.assertFalse(worker["qualifies"](no_price, "Budget: 850 plus shipping — firm maximum"))
+        with_price = "<html><body>" + (
+            "Buy it now. Add to cart. New Price $800. Epiphone USA Map guitar. " * 8
+        ) + "</body></html>"
+        no_shipping = worker["refresh_stored_offer"](stale, lambda url: with_price)
+        self.assertEqual(no_shipping["price"], 800)
+        self.assertIsNone(no_shipping["shipping"])
+        self.assertEqual(no_shipping["previous_shipping"], 25)
+        self.assertFalse(
+            worker["qualifies"](no_shipping, "Budget: 900 including shipping — firm maximum")
+        )
