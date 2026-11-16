@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from rest_framework import status
@@ -8,6 +9,7 @@ from rest_framework.response import Response
 from .matcher import analyze_match
 from .seeker_markets import (
     DISCOVERY_UNAVAILABLE,
+    WORKER_REVISION,
     assemble_markets,
     classify_heartbeat,
     is_market_discovery,
@@ -144,8 +146,9 @@ def _seeker_rows(sb):
 def _discovery_ready(sb):
     try:
         sb.table("seeker_runs").select("job_kind,market_id").limit(1).execute()
-        sb.table("seeker_worker_heartbeat").select("worker_id,seen_at").limit(1).execute()
-        sb.table("seeker_ai_usage").select("usage_date,reserved,succeeded,failed").limit(1).execute()
+        sb.table("seeker_worker_heartbeat").select("worker_id,seen_at,revision").limit(1).execute()
+        sb.table("seeker_ai_usage").select("usage_date,baseline,succeeded,failed").limit(1).execute()
+        sb.table("seeker_ai_reservations").select("id,usage_date,state").limit(1).execute()
         sb.table("buyer_posts").select("section_id").limit(1).execute()
         sb.table("seller_listings").select("section_id,availability").limit(1).execute()
     except Exception:
@@ -155,7 +158,13 @@ def _discovery_ready(sb):
 
 def _worker_report(sb):
     try:
-        rows = sb.table("seeker_worker_heartbeat").select("worker_id,seen_at").execute().data or []
+        rows = (
+            sb.table("seeker_worker_heartbeat")
+            .select("worker_id,seen_at,revision")
+            .execute()
+            .data
+            or []
+        )
     except Exception:
         return classify_heartbeat([])
     return classify_heartbeat(rows)
@@ -214,7 +223,11 @@ def seeker_market_discover(request, market_id):
         sb = get_supabase()
         ready = _discovery_ready(sb)
         worker = _worker_report(sb)
-        if not ready or worker.get("status") != "online":
+        if (
+            not ready
+            or worker.get("status") != "online"
+            or worker.get("revision") != WORKER_REVISION
+        ):
             return Response(
                 {
                     "discovery_controls": {"available": False, "message": DISCOVERY_UNAVAILABLE},
@@ -231,34 +244,31 @@ def seeker_market_discover(request, market_id):
         return Response({"error": "Market not found"}, status=status.HTTP_404_NOT_FOUND)
     market = detail["market"]
     try:
-        active = (
-            sb.table("seeker_runs")
-            .select("id,status,job_kind,market_id,result_summary,requested_at")
-            .eq("market_id", market["id"])
-            .eq("job_kind", "market_discovery")
-            .in_("status", ["pending", "running"])
-            .limit(1)
-            .execute()
-        )
-    except Exception as e:
-        return _server_error(e)
-    if active.data:
-        return Response(present_run(active.data[0]), status=status.HTTP_200_OK)
-    row = {
-        "search_query": market_scope(market["name"], market["id"]),
-        "status": "pending",
-        "job_kind": "market_discovery",
-        "market_id": market["id"],
-        "requested_at": datetime.now(timezone.utc).isoformat(),
-    }
-    try:
-        created = sb.table("seeker_runs").insert(row).execute()
-    except Exception as e:
-        return _server_error(e)
-    saved = created.data[0] if created.data else row
-    if not is_market_discovery(saved):
+        created = sb.rpc(
+            "enqueue_market_discovery",
+            {"market": market["id"], "query": market_scope(market["name"], market["id"])},
+        ).execute()
+    except Exception as exc:
+        text = str(exc).lower()
+        if "enqueue_market_discovery" in text or "pgrst202" in text or "could not find" in text:
+            return Response(
+                {
+                    "discovery_controls": {"available": False, "message": DISCOVERY_UNAVAILABLE},
+                    "worker": worker,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return _server_error(exc)
+    payload = created.data
+    if isinstance(payload, list):
+        payload = payload[0] if payload else None
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    saved = payload.get("run") if isinstance(payload, dict) else None
+    if not isinstance(saved, dict) or not is_market_discovery(saved):
         return _server_error(RuntimeError("Market discovery was not stored as its own job."))
-    return Response(present_run(saved), status=status.HTTP_201_CREATED)
+    code = status.HTTP_201_CREATED if payload.get("created") else status.HTTP_200_OK
+    return Response(present_run(saved), status=code)
 
 
 # ── Listings ──

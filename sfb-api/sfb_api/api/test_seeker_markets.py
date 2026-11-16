@@ -13,6 +13,7 @@ from sfb_api.api.seeker_markets import (
     WORKER_UNKNOWN,
     assemble_markets,
     category_for,
+    WORKER_REVISION,
     classify_heartbeat,
     display_name,
     is_market_discovery,
@@ -95,13 +96,19 @@ class DiscoveryControlTests(unittest.TestCase):
         self.assertEqual(classify_heartbeat([], NOW)["message"], WORKER_UNKNOWN)
         stale = classify_heartbeat([{"seen_at": "2026-11-16T14:00:00+00:00"}], NOW)
         self.assertEqual(stale["status"], "offline")
-        fresh = classify_heartbeat([{"seen_at": "2026-11-16T14:59:40+00:00"}], NOW)
+        fresh = classify_heartbeat(
+            [{"seen_at": "2026-11-16T14:59:40+00:00", "revision": WORKER_REVISION}], NOW,
+        )
         self.assertEqual(fresh["status"], "online")
+        self.assertEqual(fresh["revision"], WORKER_REVISION)
 
-    def test_control_stays_unavailable_until_the_worker_is_online(self):
-        offline = assemble_markets([], [], [], [], [], NOW, worker={"status": "offline", "message": "Worker offline"}, discovery_ready=True)
+    def test_control_stays_unavailable_until_the_matching_worker_is_online(self):
+        offline = assemble_markets([], [], [], [], [], NOW, worker={"status": "offline", "message": "Worker offline", "revision": WORKER_REVISION}, discovery_ready=True)
         self.assertFalse(offline["discovery_controls"]["available"])
-        online = assemble_markets([], [], [], [], [], NOW, worker={"status": "online", "message": "Worker online"}, discovery_ready=True)
+        old_worker = assemble_markets([], [], [], [], [], NOW, worker={"status": "online", "message": "Worker online", "revision": ""}, discovery_ready=True)
+        self.assertFalse(old_worker["discovery_controls"]["available"])
+        self.assertEqual(old_worker["discovery_controls"]["message"], "Market discovery not connected yet")
+        online = assemble_markets([], [], [], [], [], NOW, worker={"status": "online", "message": "Worker online", "revision": WORKER_REVISION}, discovery_ready=True)
         self.assertTrue(online["discovery_controls"]["available"])
 
     def test_run_labels_do_not_invent_a_result(self):

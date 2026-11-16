@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 NOT_AVAILABLE = "Not available"
 WORKER_UNKNOWN = "Worker status unknown"
 DISCOVERY_UNAVAILABLE = "Market discovery not connected yet"
+WORKER_REVISION = "reservation-v2"
 
 _BLANK = {"none", "n/a", "na", "null", "not specified", "not stated"}
 _INSTRUMENT_MAKES = {
@@ -231,8 +232,12 @@ def assemble_markets(sections, matches, buyers, sellers, runs, now=None, worker=
             "last_result_summary": summary,
             "watching": NOT_AVAILABLE,
         })
-    reported_worker = worker or {"status": "unknown", "message": WORKER_UNKNOWN}
-    connected = bool(discovery_ready and reported_worker.get("status") == "online")
+    reported_worker = worker or {"status": "unknown", "message": WORKER_UNKNOWN, "revision": ""}
+    connected = bool(
+        discovery_ready
+        and reported_worker.get("status") == "online"
+        and reported_worker.get("revision") == WORKER_REVISION
+    )
     return {
         "worker": reported_worker,
         "discovery_controls": {
@@ -323,16 +328,26 @@ def classify_heartbeat(rows, now=None):
     """Online only from a fresh heartbeat. No row is unknown, not offline."""
     now = now or datetime.now(timezone.utc)
     newest = None
+    newest_row = None
     for row in rows or []:
         seen = _parse_time(row.get("seen_at"))
         if seen and (newest is None or seen > newest):
             newest = seen
+            newest_row = row
+    revision = str((newest_row or {}).get("revision") or "")
     if newest is None:
-        return {"status": "unknown", "message": WORKER_UNKNOWN, "seen_at": None}
+        return {"status": "unknown", "message": WORKER_UNKNOWN, "seen_at": None, "revision": revision}
     age = now - newest
     if age <= HEARTBEAT_FRESH:
-        return {"status": "online", "message": "Worker online", "seen_at": newest.isoformat()}
-    return {"status": "offline", "message": "Worker offline", "seen_at": newest.isoformat()}
+        status_name, message = "online", "Worker online"
+    else:
+        status_name, message = "offline", "Worker offline"
+    return {
+        "status": status_name,
+        "message": message,
+        "seen_at": newest.isoformat(),
+        "revision": revision,
+    }
 
 
 def market_scope(name, market_id):
