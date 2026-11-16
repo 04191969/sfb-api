@@ -367,6 +367,9 @@ def search_wtb_posts(query, seen, max_results=15):
             # Skip shopping sites (we want forum posts)
             if any(s in url.lower() for s in ["ebay.com", "amazon.com", "walmart.com", "target.com", "bestbuy.com"]):
                 continue
+            # A catalog page can lead to listings. It is not itself a buyer.
+            if is_catalog_page(url) or not _one_search_result(title):
+                continue
             # Skip if already seen
             if is_seen(seen, url):
                 continue
@@ -1649,7 +1652,14 @@ def push_match(sb, buyer, seller, match_result, section_id=None):
         }
         if existing.data:
             buyer_id = existing.data[0]["id"]
-            sb.table("buyer_posts").update(buyer_row).eq("id", buyer_id).execute()
+            changes = dict(buyer_row)
+            buyer_platform = str(buyer.get("platform") or "").casefold()
+            buyer_url = str(buyer.get("url") or "").casefold()
+            # A later snippet must not replace the public author's stored wording.
+            if buyer_platform != "sfb" and "searchfindbuy.local" not in buyer_url:
+                changes.pop("post_text", None)
+                changes.pop("username", None)
+            sb.table("buyer_posts").update(changes).eq("id", buyer_id).execute()
         else:
             buyer_id = sb.table("buyer_posts").insert(buyer_row).execute().data[0]["id"]
 
@@ -1969,9 +1979,29 @@ def _is_requirement(clause):
     return _REQUIREMENT.search(clause or "") is not None
 
 
+_SOMEONE_ELSES_REQUEST = re.compile(
+    r"(?i)\b(?:he|she|they)(?:'s|’s| is| was| are)\s+looking for\b"
+    r"|\blet (?:him|her|them) know\b"
+    r"|\btranslation\s*:"
+    r"|\bthread title\b"
+)
+_RESULT_MARKERS = (" | ebay", " - reverb", " | reverb", " - ebay", "wtb:")
+
+
+def _someone_elses_request(text):
+    """A reply about another person's request is not this author's request."""
+    return _SOMEONE_ELSES_REQUEST.search(text or "") is not None
+
+
+def _one_search_result(title):
+    """One result has one page title. Glued headings belong to more than one URL."""
+    folded = (title or "").casefold()
+    return sum(1 for marker in _RESULT_MARKERS if marker in folded) < 2
+
+
 def _looking_for_item(clause):
     """'Looking for' needs a product. A title or a search for a buyer does not qualify."""
-    if _is_non_purchase_request(clause):
+    if _is_non_purchase_request(clause) or _someone_elses_request(clause):
         return False
     if _LOOKING_FOR_BUYER.search(clause or "") or _NOT_A_REQUEST.search(clause or ""):
         return False
@@ -2073,6 +2103,8 @@ def author_intent(text, url=""):
     pending = []
     side = ""
     for clause in _intent_clauses(author_statement(text)):
+        if _someone_elses_request(clause):
+            continue
         kind = _clause_intent(clause)
         if kind == "mixed":
             ordered = _split_mixed_clause(clause)
@@ -2133,6 +2165,10 @@ def as_matching_buyer(buyer):
     url = str((buyer or {}).get("url") or "").casefold()
     if platform == "sfb" or "searchfindbuy.local" in url:
         return buyer
+    if is_catalog_page((buyer or {}).get("url") or ""):
+        return None
+    if _someone_elses_request((buyer or {}).get("text") or ""):
+        return None
     intent = author_intent((buyer or {}).get("text") or "", (buyer or {}).get("url") or "")
     if intent["role"] not in ("buy", "mixed") or not intent["wanted"]:
         return None
@@ -2191,7 +2227,10 @@ def relevant_to_market(text, market_name):
 def public_post_roles(post, market_name=""):
     """Split a public page into a buyer request, a seller offer, neither, or both."""
     original = (post or {}).get("text") or ""
-    intent = author_intent(original, (post or {}).get("url") or "")
+    page = (post or {}).get("url") or ""
+    if is_catalog_page(page) or _someone_elses_request(original) or not _one_search_result((post or {}).get("title") or ""):
+        return None, None
+    intent = author_intent(original, page)
     buyer = seller = None
     if (
         intent["role"] in ("buy", "mixed")
@@ -2465,7 +2504,18 @@ def _take_public_post(sb, market_id, post, buyers, sellers, seen, market_name=""
 
 def _remember_buyer(sb, market_id, post):
     observed = datetime.now(timezone.utc).isoformat()
-    _save_source(sb, "buyer_posts", post["url"], {
+    existing = sb.table("buyer_posts").select("id,source_url").eq("source_url", post["url"]).execute()
+    match = next(
+        (row for row in (existing.data or []) if row.get("source_url") == post["url"] and row.get("id")),
+        None,
+    )
+    if match:
+        sb.table("buyer_posts").update({
+            "section_id": market_id,
+            "observed_at": observed,
+        }).eq("id", match["id"]).execute()
+        return match["id"]
+    return _save_source(sb, "buyer_posts", post["url"], {
         "username": (post.get("title") or "unknown")[:80],
         "post_text": (post.get("source_text") or post.get("text") or "")[:5000],
         "source_url": post["url"],
@@ -3368,6 +3418,34 @@ def check_rules():
     assert no_shipping["shipping"] is None
     assert no_shipping["previous_shipping"] == 25
     assert qualifies(no_shipping, "Budget: 900 including shipping — firm maximum") is False
+    reply = "\n".join((
+        "WTB: Gibson Southern Jumbo - Gibson Brands Forums",
+        "It's all in the thread title- WTB. Translation: he's looking for a Southern Jumbo. Let him know.",
+    ))
+    assert _someone_elses_request(reply) is True
+    assert "he's looking for" not in author_intent(reply)["wanted"]
+    assert public_post_roles({
+        "title": "WTB: Gibson Southern Jumbo - Gibson Brands Forums",
+        "text": reply,
+        "url": "https://forum.gibson.com/topic/186245-wtb-gibson-southern-jumbo/",
+        "platform": "forum",
+    }, "Gibson Southern Jumbo") == (None, None)
+    catalog_buyer = {
+        "title": "Gibson Southern Jumbo Original (2019 - 2026) - ReverbGibson Jumbo Southern for sale | eBayWTB: Gibson",
+        "text": "looking for a Southern Jumbo. Let him know. Gibson is proud to introduce the Southern Jumbo.",
+        "url": "https://reverb.com/p/gibson-southern-jumbo-original-2019-2026",
+        "platform": "reverb",
+    }
+    assert _one_search_result(catalog_buyer["title"]) is False
+    assert public_post_roles(catalog_buyer, "Gibson Southern Jumbo") == (None, None)
+    assert as_matching_buyer(catalog_buyer) is None
+    polk = as_matching_buyer({
+        "text": "I am looking for two RT35i speakers.",
+        "url": "https://forum.example/polk",
+        "platform": "forum",
+        "title": "WTB: Two Polk RT35i speakers",
+    })
+    assert "looking for two RT35i speakers" in polk["text"]
     print("availability rules ok")
 
 

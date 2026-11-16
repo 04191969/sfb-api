@@ -673,6 +673,43 @@ class ProductIntentTests(unittest.TestCase):
         }, "Epiphone USA Map")
         self.assertEqual(buyer["source_text"], GENUINE_WTB)
         self.assertIn("Must include the original case.", buyer["text"])
+
+    def test_catalog_page_and_reply_are_not_buyers(self):
+        reply = "\n".join((
+            "WTB: Gibson Southern Jumbo - Gibson Brands Forums",
+            "It's all in the thread title- WTB. Translation: he's looking for a Southern Jumbo. Let him know.",
+        ))
+        forum = {
+            "title": "WTB: Gibson Southern Jumbo - Gibson Brands Forums",
+            "text": reply,
+            "url": "https://forum.gibson.com/topic/186245-wtb-gibson-southern-jumbo/",
+            "platform": "forum",
+        }
+        self.assertIsNone(self.worker["public_post_roles"](forum, "Gibson Southern Jumbo")[0])
+        self.assertIsNone(self.worker["as_matching_buyer"](forum))
+        catalog = {
+            "title": "Gibson Southern Jumbo Original (2019 - 2026) - ReverbGibson Jumbo Southern for sale | eBayWTB: Gibson",
+            "text": "looking for a Southern Jumbo. Let him know.",
+            "url": "https://reverb.com/p/gibson-southern-jumbo-original-2019-2026",
+            "platform": "reverb",
+        }
+        self.assertFalse(self.worker["_one_search_result"](catalog["title"]))
+        self.assertEqual(self.worker["public_post_roles"](catalog, "Gibson Southern Jumbo"), (None, None))
+        self.assertIsNone(self.worker["as_matching_buyer"](catalog))
+        direct = self.worker["as_matching_buyer"]({
+            "text": "I am looking for two RT35i speakers.",
+            "url": "https://forum.example/polk",
+            "platform": "forum",
+            "title": "WTB: Two Polk RT35i speakers",
+        })
+        self.assertIn("looking for two RT35i speakers", direct["text"])
+        item = self.worker["public_post_roles"]({
+            "title": "WTB Epiphone USA Map",
+            "text": GENUINE_WTB,
+            "url": REVERB_ITEM,
+            "platform": "reverb",
+        }, "Epiphone USA Map")[0]
+        self.assertIn("Must include the original case.", item["text"])
         unrelated, _offer = self.worker["public_post_roles"]({
             "title": "WTB Fender Stratocaster",
             "text": "WTB Fender Stratocaster.",
