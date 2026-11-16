@@ -1973,8 +1973,43 @@ def _identifiable_item(text):
     return bool(specific)
 
 
+_NON_PURCHASE_OBJECT = re.compile(
+    r"(?i)\b(?:looking to buy|looking for|want to buy|wanted to buy|willing to buy|in search of|wtb)\b"
+    r"\s+(?:(?:an?|some|any|more|the)\s+)?"
+    r"(?:advice|opinions?|thoughts?|suggestions?|photos?|pictures?|pics|images?|info|information|help)\b"
+)
+_OWNED_OR_MENTION = re.compile(
+    r"(?i)\b(?:i own|i already have|i already own|i've got|i’ve got)\b"
+    r"|\b(?:i have|i've got)\s+(?:an?|the|my)\s+"
+    r"|\b(?:just saw|i saw|saw an?|came across|noticed an?)\b"
+)
+_REQUIREMENT = re.compile(
+    r"(?i)\b(?:budget|willing to pay|pay up to|no more than|plus shipping|\+ shipping|"
+    r"including shipping|shipping extra|firm maximum|condition|located in|location|"
+    r"requirements|must include|must have|needs to include|original case|no relic|not a relic)\b"
+)
+_MODEL_GENERIC = {
+    "the", "for", "and", "guitar", "guitars", "a", "an", "of", "to", "my", "your",
+}
+
+
+def _is_non_purchase_request(clause):
+    """Advice or photos are not a request to buy the instrument they mention."""
+    return _NON_PURCHASE_OBJECT.search(clause or "") is not None
+
+
+def _owned_or_mentioned(clause):
+    return _OWNED_OR_MENTION.search(clause or "") is not None
+
+
+def _is_requirement(clause):
+    return _REQUIREMENT.search(clause or "") is not None
+
+
 def _looking_for_item(clause):
     """'Looking for' needs a product. A title or a search for a buyer does not qualify."""
+    if _is_non_purchase_request(clause):
+        return False
     if _LOOKING_FOR_BUYER.search(clause or "") or _NOT_A_REQUEST.search(clause or ""):
         return False
     match = _LOOKING_FOR.search(clause or "")
@@ -1984,14 +2019,32 @@ def _looking_for_item(clause):
 
 
 def _positive_buy(clause):
+    if _is_non_purchase_request(clause):
+        return False
     if _NOT_A_REQUEST.search(clause or "") and not _BUY_INTENT.search(clause or ""):
         return False
     for match in _BUY_INTENT.finditer(clause or ""):
         if _negated_at(clause, match.start()):
             continue
-        if _identifiable_item(clause):
+        if _identifiable_item(clause[match.end():] or clause):
             return True
     return _looking_for_item(clause)
+
+
+def _from_acquisition(clause):
+    """The words that name the item sought. An instrument already owned stays out."""
+    if _is_non_purchase_request(clause):
+        return ""
+    starts = []
+    for match in _BUY_INTENT.finditer(clause or ""):
+        if not _negated_at(clause, match.start()):
+            starts.append(match.start())
+    looking = _LOOKING_FOR.search(clause or "")
+    if looking and _looking_for_item(clause):
+        starts.append(looking.start())
+    if not starts:
+        return (clause or "").strip()
+    return (clause or "")[min(starts):].strip()
 
 
 def _positive_sell(clause):
@@ -2040,7 +2093,7 @@ def _split_mixed_clause(clause):
     for index, (start, kind) in enumerate(marks):
         end = marks[index + 1][0] if index + 1 < len(marks) else len(clause or "")
         piece = (clause or "")[start:end].strip(" ,;.")
-        if index == 0 and leading:
+        if index == 0 and leading and not _owned_or_mentioned(leading):
             piece = f"{leading} {piece}".strip()
         if piece:
             ordered.append((kind, piece))
@@ -2077,13 +2130,17 @@ def author_intent(text, url=""):
                 buys.extend(pending)
                 pending = []
             side = "buy"
-            buys.append(clause)
+            acquired = _from_acquisition(clause)
+            if acquired:
+                buys.append(acquired)
         elif kind == "sell":
             if not side:
                 sells.extend(pending)
                 pending = []
             side = "sell"
             sells.append(clause)
+        elif _owned_or_mentioned(clause) and not _is_requirement(clause):
+            continue
         elif side == "buy":
             buys.append(clause)
         elif side == "sell":
@@ -2122,16 +2179,50 @@ def as_matching_buyer(buyer):
     return kept
 
 
-def relevant_to_market(text, market_name):
-    """The wanted item has to be the market's item. Another request stays unrelated."""
-    tokens = [
-        token for token in re.findall(r"[a-z0-9]+", (market_name or "").lower())
-        if len(token) >= 3 and token not in {"the", "for", "and", "guitar", "guitars"}
-    ]
-    if not tokens:
+def _model_tokens(text):
+    """Model words with hyphens kept inside a word. Spaces still separate words."""
+    tokens = []
+    for raw in re.findall(r"[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)*", text or ""):
+        token = re.sub(r"[^a-z0-9]", "", raw.lower())
+        if token and token not in _MODEL_GENERIC:
+            tokens.append(token)
+    return tokens
+
+
+def _models_align(wanted, market, index, place):
+    """Market tokens may fuse across a hyphen or a space, but not into a longer model."""
+    if place == len(market):
         return True
-    blob = (text or "").lower()
-    return all(re.search(rf"\b{re.escape(token)}\b", blob) for token in tokens)
+    if index == len(wanted):
+        return False
+    if wanted[index] == market[place] and _models_align(wanted, market, index + 1, place + 1):
+        return True
+    fused = ""
+    cursor = place
+    while cursor < len(market) and len(fused) < len(wanted[index]):
+        fused += market[cursor]
+        cursor += 1
+        if fused == wanted[index] and _models_align(wanted, market, index + 1, cursor):
+            return True
+    fused = ""
+    cursor = index
+    while cursor < len(wanted) and len(fused) < len(market[place]):
+        fused += wanted[cursor]
+        cursor += 1
+        if fused == market[place] and _models_align(wanted, market, cursor, place + 1):
+            return True
+    return False
+
+
+def relevant_to_market(text, market_name):
+    """The wanted item has to be this market. Punctuation does not make a new model."""
+    market = _model_tokens(market_name)
+    if not market:
+        return True
+    wanted = _model_tokens(_from_acquisition(text) or text)
+    if not wanted:
+        return False
+    return any(_models_align(wanted, market, start, 0) for start in range(len(wanted)))
 
 
 def public_post_roles(post, market_name=""):
@@ -3226,6 +3317,29 @@ def check_rules():
     assert genuine_intent["source"] == genuine
     assert "Budget: $850 plus shipping, firm maximum." in genuine_intent["wanted"]
     assert "Must include the original case." in genuine_intent["wanted"]
+    assert author_intent("Looking for advice on my Epiphone USA Map.")["role"] == "unresolved"
+    assert author_intent("Looking for photos of an Epiphone USA Map.")["role"] == "unresolved"
+    owned = "\n".join((
+        "I own an Epiphone USA Map.",
+        "WTB a Gibson Les Paul.",
+        "Budget: $1500 plus shipping, firm maximum.",
+        "Must include the original case.",
+    ))
+    owned_intent = author_intent(owned)
+    assert owned_intent["source"] == owned
+    assert "Gibson Les Paul" in owned_intent["wanted"]
+    assert "Epiphone" not in owned_intent["wanted"]
+    assert "Budget: $1500 plus shipping, firm maximum." in owned_intent["wanted"]
+    assert "Must include the original case." in owned_intent["wanted"]
+    assert relevant_to_market(owned_intent["wanted"], "Epiphone USA Map") is False
+    assert relevant_to_market(owned_intent["wanted"], "Gibson Les Paul") is True
+    assert author_intent("Saw an Epiphone USA Map today. WTB a Fender Stratocaster.")["wanted"].startswith("WTB")
+    assert relevant_to_market("WTB Epiphone USA-Map.", "Epiphone USA Map") is True
+    assert relevant_to_market("WTB Epiphone USAMap.", "Epiphone USA Map") is True
+    assert relevant_to_market("WTB ST62.", "ST-62") is True
+    assert relevant_to_market("WTB ST 62.", "ST-62") is True
+    assert relevant_to_market("WTB ST62.", "ST-62G") is False
+    assert relevant_to_market("WTB ST-62G.", "ST-62") is False
     product_page = "https://reverb.com/p/epiphone-usa-map-guitar-reissue"
     direct_item = "https://reverb.com/item/97393148-epiphone-usa-map"
     linked_item = "https://reverb.com/item/97393148-epiphone-usa-map-guitar"

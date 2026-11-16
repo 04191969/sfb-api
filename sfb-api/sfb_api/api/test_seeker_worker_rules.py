@@ -781,3 +781,110 @@ class ProductIntentTests(unittest.TestCase):
         )
         pairs = self.worker["market_comparisons"]([buyer, song], [product, item], "Epiphone USA Map")
         self.assertEqual([seller["url"] for _buyer, seller in pairs], [REVERB_ITEM])
+
+
+class WantedProductTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = load_worker()
+
+    def test_advice_and_photo_requests_are_not_purchases(self):
+        worker = self.worker
+        for statement in (
+            "Looking for advice on my Epiphone USA Map.",
+            "Looking for photos of an Epiphone USA Map.",
+            "WTB pictures of an Epiphone USA Map.",
+        ):
+            intent = worker["author_intent"](statement)
+            self.assertEqual(intent["role"], "unresolved", statement)
+            self.assertEqual(intent["source"], statement)
+            self.assertIsNone(worker["as_matching_buyer"]({
+                "text": statement,
+                "url": "https://forum.example/not-a-purchase",
+                "platform": "web",
+                "title": statement,
+            }))
+            buyer, _offer = worker["public_post_roles"]({
+                "text": statement,
+                "url": "https://forum.example/not-a-purchase",
+                "platform": "web",
+                "title": statement,
+            }, "Epiphone USA Map")
+            self.assertIsNone(buyer)
+
+    def test_owned_or_mentioned_product_does_not_set_the_market(self):
+        owned = "\n".join((
+            "I own an Epiphone USA Map.",
+            "WTB a Gibson Les Paul.",
+            "Budget: $1500 plus shipping, firm maximum.",
+            "Must include the original case.",
+        ))
+        intent = self.worker["author_intent"](owned)
+        self.assertEqual(intent["role"], "buy")
+        self.assertEqual(intent["source"], owned)
+        self.assertIn("Gibson Les Paul", intent["wanted"])
+        self.assertNotIn("Epiphone", intent["wanted"])
+        self.assertIn("Budget: $1500 plus shipping, firm maximum.", intent["wanted"])
+        self.assertIn("Must include the original case.", intent["wanted"])
+        self.assertFalse(self.worker["relevant_to_market"](intent["wanted"], "Epiphone USA Map"))
+        self.assertTrue(self.worker["relevant_to_market"](intent["wanted"], "Gibson Les Paul"))
+        buyer, _offer = self.worker["public_post_roles"]({
+            "text": owned,
+            "url": "https://forum.example/owns-map",
+            "platform": "web",
+            "title": "WTB a Gibson Les Paul",
+        }, "Epiphone USA Map")
+        self.assertIsNone(buyer)
+        gibson_buyer, _offer = self.worker["public_post_roles"]({
+            "text": owned,
+            "url": "https://forum.example/owns-map",
+            "platform": "web",
+            "title": "WTB a Gibson Les Paul",
+        }, "Gibson Les Paul")
+        self.assertIn("Must include the original case.", gibson_buyer["text"])
+        self.assertEqual(gibson_buyer["source_text"], owned)
+        mentioned = "Saw an Epiphone USA Map today. WTB a Fender Stratocaster."
+        mentioned_intent = self.worker["author_intent"](mentioned)
+        self.assertNotIn("Epiphone", mentioned_intent["wanted"])
+        self.assertIn("Fender Stratocaster", mentioned_intent["wanted"])
+        self.assertFalse(self.worker["relevant_to_market"](mentioned_intent["wanted"], "Epiphone USA Map"))
+        sellers = [{
+            "url": "https://reverb.com/item/555-gibson-les-paul",
+            "text": "Gibson Les Paul for sale",
+            "availability": "available",
+            "title": "Gibson Les Paul",
+        }]
+        self.assertEqual(
+            self.worker["market_comparisons"](
+                [{"text": owned, "url": "https://forum.example/owns-map", "platform": "web", "title": "WTB"}],
+                sellers,
+                "Epiphone USA Map",
+            ),
+            [],
+        )
+        pairs = self.worker["market_comparisons"](
+            [{"text": owned, "url": "https://forum.example/owns-map", "platform": "web", "title": "WTB"}],
+            sellers,
+            "Gibson Les Paul",
+        )
+        self.assertEqual([seller["url"] for _buyer, seller in pairs], ["https://reverb.com/item/555-gibson-les-paul"])
+
+    def test_model_punctuation_matches_without_collapsing_different_models(self):
+        worker = self.worker
+        hyphenated = "\n".join((
+            "WTB Epiphone USA-Map.",
+            "Budget: $850 plus shipping, firm maximum.",
+            "Must include the original case.",
+        ))
+        intent = worker["author_intent"](hyphenated)
+        self.assertEqual(intent["source"], hyphenated)
+        self.assertIn("USA-Map", intent["wanted"])
+        self.assertIn("Budget: $850 plus shipping, firm maximum.", intent["wanted"])
+        self.assertIn("Must include the original case.", intent["wanted"])
+        self.assertTrue(worker["relevant_to_market"](intent["wanted"], "Epiphone USA Map"))
+        self.assertTrue(worker["relevant_to_market"]("WTB Epiphone USAMap.", "Epiphone USA Map"))
+        self.assertTrue(worker["relevant_to_market"]("WTB ST62.", "ST-62"))
+        self.assertTrue(worker["relevant_to_market"]("WTB ST 62.", "ST-62"))
+        self.assertFalse(worker["relevant_to_market"]("WTB ST62.", "ST-62G"))
+        self.assertFalse(worker["relevant_to_market"]("WTB ST-62G.", "ST-62"))
+        self.assertFalse(worker["relevant_to_market"]("WTB Gibson Les Paul.", "Epiphone USA Map"))
