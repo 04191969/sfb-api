@@ -338,3 +338,72 @@ class MarketDiscoveryPathTests(unittest.TestCase):
         self.assertFalse(
             worker["qualifies"](no_shipping, "Budget: 900 including shipping — firm maximum")
         )
+
+
+FACEBOOK_SALE = "https://www.facebook.com/marketplace/item/1411175104520622/"
+SELLING_EXCERPT = "Selling a rare piece of guitar history."
+
+
+class BuyerIntentTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = load_worker()
+
+    def test_facebook_selling_excerpt_is_not_a_buyer(self):
+        intent = self.worker["author_intent"](SELLING_EXCERPT, FACEBOOK_SALE)
+        self.assertEqual(intent["role"], "sell")
+        buyer, offer = self.worker["public_post_roles"]({
+            "title": SELLING_EXCERPT,
+            "text": SELLING_EXCERPT,
+            "url": FACEBOOK_SALE,
+            "platform": "facebook",
+        })
+        self.assertIsNone(buyer)
+        self.assertEqual(offer["text"], SELLING_EXCERPT)
+
+    def test_genuine_buy_request_is_accepted(self):
+        intent = self.worker["author_intent"]("Looking to buy an Epiphone USA Map")
+        self.assertEqual(intent["role"], "buy")
+        self.assertIn("Epiphone USA Map", intent["wanted"])
+
+    def test_quoted_navigation_and_related_text_are_not_the_author(self):
+        worker = self.worker
+        quoted = worker["author_intent"](
+            'The index lists "WTB Epiphone USA Map". Selling a rare piece of guitar history.'
+        )
+        self.assertEqual(quoted["role"], "sell")
+        self.assertNotIn("Epiphone", quoted["wanted"])
+        navigation = worker["author_intent"]("Marketplace · Buy · Sell · WTB\nEpiphone USA Map")
+        self.assertEqual(navigation["role"], "unresolved")
+        related = worker["author_intent"](
+            "Looking to buy an Epiphone USA Map.\nRelated listings\nWTB Fender Stratocaster"
+        )
+        self.assertIn("Looking to buy an Epiphone USA Map", related["wanted"])
+        self.assertNotIn("Fender", related["wanted"])
+
+    def test_mixed_post_matches_only_the_wanted_item(self):
+        intent = self.worker["author_intent"]("WTB Epiphone USA Map. WTS Gibson Les Paul for sale.")
+        self.assertEqual(intent["role"], "mixed")
+        self.assertIn("Epiphone USA Map", intent["wanted"])
+        self.assertNotIn("Gibson", intent["wanted"])
+        self.assertIn("Gibson", intent["offered"])
+        buyer = self.worker["as_matching_buyer"]({
+            "text": "WTB Epiphone USA Map. WTS Gibson Les Paul for sale.",
+            "url": "https://forum.example/mixed",
+            "platform": "web",
+            "title": "mixed",
+        })
+        self.assertNotIn("Gibson", buyer["text"])
+
+    def test_stored_facebook_sale_cannot_recreate_seller_matches(self):
+        record = {
+            "title": SELLING_EXCERPT,
+            "text": SELLING_EXCERPT,
+            "url": FACEBOOK_SALE,
+            "platform": "facebook",
+        }
+        sellers = [
+            {"url": f"https://reverb.com/item/{number}", "text": "Epiphone USA Map for sale", "availability": "available"}
+            for number in range(4)
+        ]
+        self.assertEqual(self.worker["market_comparisons"]([record], sellers), [])

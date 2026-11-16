@@ -1695,7 +1695,11 @@ def auto_search(sb, openai_client, seen, search_index, shuffled_plan):
     print(f"    Found {len(wtb_posts)} WTB post(s)")
 
     matches_found = 0
-    for buyer in wtb_posts:
+    for found_post in wtb_posts:
+        buyer, _offer = public_post_roles(found_post)
+        if not buyer:
+            print(f"    Not a buyer request: {(found_post.get('title') or '')[:70]}")
+            continue
         print(f"    Buyer: {buyer['title'][:70]}")
 
         # Step 2: Search listings across marketplaces using the buyer's actual post
@@ -1784,6 +1788,129 @@ def stored_buyer(row):
     }
 
 
+_BUY_INTENT = re.compile(
+    r"(?i)\b(?:looking to buy|want to buy|wanted to buy|willing to buy|in search of|wtb|looking for)\b"
+)
+_SELL_INTENT = re.compile(r"(?i)\b(?:selling|for sale|wts|up for sale)\b|\bfs\s*:")
+_LOOKING_FOR_BUYER = re.compile(r"(?i)\blooking for (?:a )?buyers?\b")
+_RELATED_LISTINGS = re.compile(
+    r"(?is)\b(?:related listings?|similar listings?|similar items|you may also like|people also viewed|recommended(?: items)?)\b.*"
+)
+_QUOTED_TEXT = re.compile(r"[\"“][^\"”]{0,500}[\"”]")
+_NAV_WORDS = {
+    "home", "marketplace", "buy", "sell", "wtb", "wts", "categories", "category",
+    "filter", "filters", "sort", "by", "saved", "inbox", "notifications", "search",
+}
+
+
+def _navigation_line(line):
+    words = re.findall(r"[A-Za-z']+", line or "")
+    if not words or len(words) > 10:
+        return False
+    hits = sum(1 for word in words if word.casefold() in _NAV_WORDS)
+    return hits >= max(2, (len(words) + 1) // 2)
+
+
+def author_statement(text):
+    """Author wording. Quotes, navigation, and related listings are not the author."""
+    raw = _RELATED_LISTINGS.sub(" ", text or "")
+    raw = _QUOTED_TEXT.sub(" ", raw)
+    kept = [line for line in re.split(r"[\r\n]+", raw) if not _navigation_line(line)]
+    return " ".join(kept)
+
+
+def _intent_clauses(text):
+    parts = re.split(r"(?<=[.!?])\s+|\s*;\s*", text or "")
+    return [part.strip() for part in parts if part.strip(" .")]
+
+
+def _clause_intent(clause):
+    buy_text = _LOOKING_FOR_BUYER.sub(" ", clause or "")
+    buying = bool(_BUY_INTENT.search(buy_text))
+    selling = bool(_SELL_INTENT.search(clause or "")) or bool(_LOOKING_FOR_BUYER.search(clause or ""))
+    if buying and selling:
+        return "mixed"
+    if buying:
+        return "buy"
+    if selling:
+        return "sell"
+    return ""
+
+
+def _split_mixed_clause(clause):
+    buys, sells = [], []
+    for piece in re.split(r"\s+\b(?:but|and)\b\s+|,\s+", clause or "", flags=re.I):
+        kind = _clause_intent(piece)
+        if kind == "buy":
+            buys.append(piece.strip())
+        elif kind == "sell":
+            sells.append(piece.strip())
+    return buys, sells
+
+
+def author_intent(text, url=""):
+    """What the author is doing. A search query or product name is not enough."""
+    buys, sells = [], []
+    for clause in _intent_clauses(author_statement(text)):
+        kind = _clause_intent(clause)
+        if kind == "mixed":
+            part_buys, part_sells = _split_mixed_clause(clause)
+            buys.extend(part_buys)
+            sells.extend(part_sells)
+        elif kind == "buy":
+            buys.append(clause)
+        elif kind == "sell":
+            sells.append(clause)
+    wanted = " ".join(part for part in buys if part).strip()
+    offered = " ".join(part for part in sells if part).strip()
+    if wanted and offered:
+        role = "mixed"
+    elif wanted:
+        role = "buy"
+    elif offered:
+        role = "sell"
+    else:
+        role = "unresolved"
+    return {"role": role, "wanted": wanted, "offered": offered}
+
+
+def as_matching_buyer(buyer):
+    """A stored or discovered post may enter matching only as the item its author wants."""
+    if str((buyer or {}).get("text") or "").startswith("Market discovery\n"):
+        return None
+    platform = str((buyer or {}).get("platform") or "").casefold()
+    url = str((buyer or {}).get("url") or "").casefold()
+    if platform == "sfb" or "searchfindbuy.local" in url:
+        return buyer
+    intent = author_intent((buyer or {}).get("text") or "", (buyer or {}).get("url") or "")
+    if intent["role"] not in ("buy", "mixed") or not intent["wanted"]:
+        return None
+    kept = dict(buyer)
+    kept["text"] = intent["wanted"]
+    return kept
+
+
+def public_post_roles(post):
+    """Split a public page into a buyer request, a seller offer, neither, or both."""
+    intent = author_intent((post or {}).get("text") or "", (post or {}).get("url") or "")
+    buyer = seller = None
+    if intent["role"] in ("buy", "mixed") and intent["wanted"]:
+        buyer = dict(post)
+        buyer["text"] = intent["wanted"]
+    if intent["role"] in ("sell", "mixed") and intent["offered"]:
+        seller = {
+            "title": intent["offered"][:80],
+            "text": intent["offered"],
+            "url": (post or {}).get("url") or "",
+            "platform": (post or {}).get("platform") or "web",
+            "availability": "unconfirmed",
+            "qualifying": False,
+            "price": None,
+            "shipping": None,
+        }
+    return buyer, seller
+
+
 def stored_seller(row):
     """A saved available flag is not current until the item page is read again."""
     return {
@@ -1840,7 +1967,8 @@ def market_comparisons(buyers, sellers):
         if not seller.get("cross_post")
     ]
     for buyer in unique_by_url(buyers):
-        if str(buyer.get("text") or "").startswith("Market discovery\n"):
+        buyer = as_matching_buyer(buyer)
+        if not buyer:
             continue
         for seller in offer_rows:
             if buyer.get("url") and buyer.get("url") == seller.get("url"):
@@ -1988,6 +2116,39 @@ def record_offer_observation(sb, seller):
     }).eq("source_url", seller["url"]).execute()
 
 
+def _remember_offer(sb, market_id, offer):
+    if not offer.get("url"):
+        return
+    observed = datetime.now(timezone.utc).isoformat()
+    _save_source(sb, "seller_listings", offer["url"], {
+        "username": (offer.get("title") or "unknown")[:80],
+        "listing_text": f"Availability unconfirmed\n{offer.get('text') or ''}"[:5000],
+        "price": None,
+        "shipping": None,
+        "currency": None,
+        "availability": "unconfirmed",
+        "source_url": offer["url"],
+        "source_platform": offer.get("platform") or "web",
+        "source_id": source_identity(offer["url"]),
+        "section_id": market_id,
+        "scraped_at": observed,
+        "observed_at": observed,
+    })
+
+
+def _take_public_post(sb, market_id, post, buyers, sellers, seen):
+    """Save a public page by what its author is doing. A search hit is not a buyer."""
+    buyer, offer = public_post_roles(post)
+    if buyer:
+        _remember_buyer(sb, market_id, buyer)
+        buyers.append(buyer)
+    if offer:
+        _remember_offer(sb, market_id, offer)
+        sellers.append(offer)
+    if buyer or offer:
+        mark_seen(seen, post.get("url") or "", post.get("title", ""))
+
+
 def _remember_buyer(sb, market_id, post):
     observed = datetime.now(timezone.utc).isoformat()
     _save_source(sb, "buyer_posts", post["url"], {
@@ -2029,14 +2190,13 @@ def run_market_discovery(sb, openai_client, seen, run):
             _finish_run(sb, run_id, search_outcome([], f"existing market records could not be read — {exc}"))
         return
     buyers = []
+    discovered_offers = []
     for post in search_wtb_posts(f"\"{market_name}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
         if is_market_discovery_run({"search_query": post.get("text") or ""}):
             continue
-        _remember_buyer(sb, market_id, post)
-        buyers.append(post)
-        mark_seen(seen, post["url"], post.get("title", ""))
+        _take_public_post(sb, market_id, post, buyers, discovered_offers, seen)
     found = search_listings(market_name, seen, max_keep=8, buyer_text=market_name)
-    sellers = found["listings"]
+    sellers = found["listings"] + discovered_offers
     observed = datetime.now(timezone.utc).isoformat()
     for seller in sellers:
         label = availability_label(seller.get("availability"))
@@ -2063,9 +2223,7 @@ def run_market_discovery(sb, openai_client, seen, run):
         for post in search_wtb_posts(f"\"{query}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
             if is_market_discovery_run({"search_query": post.get("text") or ""}):
                 continue
-            _remember_buyer(sb, market_id, post)
-            buyers.append(post)
-            mark_seen(seen, post["url"], post.get("title", ""))
+            _take_public_post(sb, market_id, post, buyers, sellers, seen)
     compared = market_comparisons(buyers + existing_buyers, sellers + existing_sellers)
     verified = 0
     try:
@@ -2730,6 +2888,25 @@ def check_rules():
     unreadable_offer = refresh_stored_offer(stale, lambda url: "nope")
     assert unreadable_offer["availability"] == "unconfirmed"
     assert unreadable_offer["qualifying"] is False
+    facebook = "https://www.facebook.com/marketplace/item/1411175104520622/"
+    selling = "Selling a rare piece of guitar history."
+    assert author_intent(selling, facebook)["role"] == "sell"
+    assert as_matching_buyer({"text": selling, "url": facebook, "platform": "facebook"}) is None
+    assert author_intent("Looking to buy an Epiphone USA Map")["role"] == "buy"
+    quoted = 'The index lists "WTB Epiphone USA Map". Selling a rare piece of guitar history.'
+    assert author_intent(quoted)["role"] == "sell"
+    nav = "Marketplace · Buy · Sell · WTB\nEpiphone USA Map"
+    assert author_intent(nav)["role"] == "unresolved"
+    related = "Looking to buy an Epiphone USA Map.\nRelated listings\nWTB Fender Stratocaster"
+    related_intent = author_intent(related)
+    assert "Looking to buy an Epiphone USA Map" in related_intent["wanted"]
+    assert "Fender" not in related_intent["wanted"]
+    mixed = author_intent("WTB Epiphone USA Map. WTS Gibson Les Paul for sale.")
+    assert mixed["role"] == "mixed"
+    assert "Gibson" not in mixed["wanted"]
+    assert "Epiphone USA Map" in mixed["wanted"]
+    misclassified = {"text": selling, "url": facebook, "platform": "facebook", "title": selling}
+    assert market_comparisons([misclassified], [{"url": f"https://reverb.com/item/{i}", "text": "for sale"} for i in range(4)]) == []
     priced = dict(stale)
     priced["price"] = 400
     priced["shipping"] = 25
