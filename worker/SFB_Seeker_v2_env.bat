@@ -252,8 +252,104 @@ def recover_after_restart(sb):
     _rpc_quiet(sb, "requeue_stale_seeker_runs", {"stale_seconds": 180})
 
 
+def is_scheduled_job(run):
+    """Scheduler work only. A manual consumer search is not scheduled."""
+    return str((run or {}).get("trigger") or "") == "schedule"
+
+
+def scheduled_job_is_held(run, paused):
+    """Pause keeps an already queued scheduled job from being claimed."""
+    return (
+        bool(paused)
+        and str((run or {}).get("status") or "pending") == "pending"
+        and is_scheduled_job(run)
+    )
+
+
+def scheduled_jobs_held(sb):
+    """Missing pause storage holds scheduled work. Consumer searches still run."""
+    if not hasattr(sb, "table"):
+        return False
+    try:
+        rows = (
+            sb.table("seeker_global_pause").select("paused").eq("id", "seeker").limit(1).execute().data
+            or []
+        )
+    except Exception:
+        return True
+    if not rows:
+        return True
+    return bool(rows[0].get("paused"))
+
+
+def _pending_jobs(sb, job_kind):
+    return (
+        sb.table("seeker_runs").select("*")
+        .eq("status", "pending").eq("job_kind", job_kind)
+        .order("requested_at").limit(20).execute().data
+        or []
+    )
+
+
+def claim_manual_only(sb):
+    """Claim a consumer search or a user discovery. Leave scheduled jobs pending."""
+    chosen = None
+    for job_kind in ("consumer_search", "market_discovery"):
+        try:
+            rows = _pending_jobs(sb, job_kind)
+        except Exception:
+            return None
+        for run in rows:
+            if is_scheduled_job(run):
+                continue
+            chosen = run
+            break
+        if chosen:
+            break
+    if not chosen:
+        return None
+    payload = {
+        "status": "running",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "claimed_by": WORKER_ID,
+    }
+    try:
+        saved = (
+            sb.table("seeker_runs").update(payload)
+            .eq("id", chosen["id"]).eq("status", "pending").execute()
+        )
+    except Exception:
+        payload.pop("claimed_by", None)
+        try:
+            saved = (
+                sb.table("seeker_runs").update(payload)
+                .eq("id", chosen["id"]).eq("status", "pending").execute()
+            )
+        except Exception:
+            return None
+    if not getattr(saved, "data", None):
+        return None
+    chosen.update(saved.data[0])
+    return chosen
+
+
+def _release_claimed(sb, run_id):
+    if not run_id:
+        return
+    try:
+        sb.table("seeker_runs").update({
+            "status": "pending",
+            "started_at": None,
+            "claimed_by": None,
+        }).eq("id", run_id).eq("status", "running").eq("claimed_by", WORKER_ID).execute()
+    except Exception:
+        return
+
+
 def enqueue_due_markets(sb):
-    """Enabled markets only. Every market is paused until a control row says otherwise."""
+    """Enabled markets only, and only while Seeker is not paused."""
+    if scheduled_jobs_held(sb):
+        return
     try:
         controls = sb.table("seeker_market_controls").select("*").eq("enabled", True).execute().data or []
     except Exception:
@@ -336,6 +432,8 @@ def _enqueue_recheck(sb, market_id):
 
 
 def claim_next_run(sb):
+    if scheduled_jobs_held(sb):
+        return claim_manual_only(sb)
     try:
         result = sb.rpc("claim_next_seeker_run", {"worker": WORKER_ID}).execute()
     except Exception as exc:
@@ -349,6 +447,9 @@ def claim_next_run(sb):
             data = json.loads(data)
         except ValueError:
             return None
+    if data and is_scheduled_job(data) and scheduled_jobs_held(sb):
+        _release_claimed(sb, data.get("id"))
+        return claim_manual_only(sb)
     return data or None
 
 # What to search for — WTB queries by category (shuffled each cycle)
@@ -3135,6 +3236,8 @@ def check_manual_requests(sb, openai_client, seen):
             if not result.data:
                 return False
             run = result.data[0]
+            if is_scheduled_job(run) and scheduled_jobs_held(sb):
+                return False
             sb.table("seeker_runs").update({
                 "status": "running",
                 "started_at": datetime.now(timezone.utc).isoformat(),
@@ -3143,6 +3246,10 @@ def check_manual_requests(sb, openai_client, seen):
             return False
         else:
             run = claimed
+
+        if is_scheduled_job(run) and scheduled_jobs_held(sb):
+            _release_claimed(sb, run.get("id"))
+            return False
 
         run_id = run["id"]
         query = (run.get("search_query") or "").strip()
@@ -4123,6 +4230,14 @@ def check_rules():
     assert via_profile["resolved"] is True
     assert via_profile["availability"] == via_item["status"] == "available"
     assert via_profile["evidence"] == via_item["evidence"] == "facebook_item"
+    scheduled = {"status": "pending", "trigger": "schedule", "job_kind": "market_discovery"}
+    consumer = {"status": "pending", "trigger": "user", "job_kind": "consumer_search"}
+    assert is_scheduled_job(scheduled) is True
+    assert is_scheduled_job(consumer) is False
+    assert scheduled_job_is_held(scheduled, True) is True
+    assert scheduled_job_is_held(consumer, True) is False
+    assert scheduled_job_is_held({"status": "running", "trigger": "schedule", "job_kind": "recheck"}, True) is False
+    assert scheduled_job_is_held(scheduled, False) is False
     print("availability rules ok")
 
 

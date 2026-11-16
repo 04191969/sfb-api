@@ -112,6 +112,138 @@ class ReservationRulesTests(unittest.TestCase):
         )
 
 
+class _Result:
+    def __init__(self, data):
+        self.data = data
+
+
+class PauseQueue:
+    """Pending jobs plus a global pause flag. A paused claim must not call the open claim."""
+
+    def __init__(self, rows, pause=True, pause_error=False):
+        self.rows = [dict(row) for row in rows]
+        self.pause = pause
+        self.pause_error = pause_error
+        self.rpc_called = False
+
+    def table(self, name):
+        return _PauseQuery(self, name)
+
+    def rpc(self, name, args):
+        self.rpc_called = True
+        raise AssertionError(name)
+
+
+class _PauseQuery:
+    def __init__(self, db, table):
+        self.db = db
+        self.table = table
+        self.filters = []
+        self.kind = "select"
+        self.payload = None
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, key, value):
+        self.filters.append((key, value))
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def update(self, row):
+        self.kind = "update"
+        self.payload = row
+        return self
+
+    def execute(self):
+        if self.table == "seeker_global_pause":
+            if self.db.pause_error:
+                raise Exception("Could not find the table public.seeker_global_pause")
+            return _Result([{"id": "seeker", "paused": self.db.pause}])
+        matched = [
+            run for run in self.db.rows
+            if all(run.get(key) == value for key, value in self.filters)
+        ]
+        if self.kind == "update":
+            for run in matched:
+                run.update(self.payload)
+            return _Result([dict(run) for run in matched])
+        matched.sort(key=lambda run: str(run.get("requested_at") or ""))
+        return _Result([dict(run) for run in matched])
+
+
+class PauseClaimTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = load_worker()
+
+    def test_paused_claim_skips_queued_scheduled_jobs(self):
+        worker = self.worker
+        queue = PauseQueue([
+            {
+                "id": "sched",
+                "status": "pending",
+                "job_kind": "market_discovery",
+                "trigger": "schedule",
+                "requested_at": "2026-11-16T14:00:00+00:00",
+            },
+            {
+                "id": "consumer",
+                "status": "pending",
+                "job_kind": "consumer_search",
+                "trigger": "user",
+                "requested_at": "2026-11-16T14:05:00+00:00",
+            },
+        ])
+        claimed = worker["claim_next_run"](queue)
+        self.assertEqual(claimed["id"], "consumer")
+        self.assertEqual(claimed["status"], "running")
+        self.assertFalse(queue.rpc_called)
+        self.assertEqual(queue.rows[0]["status"], "pending")
+        self.assertEqual(queue.rows[1]["status"], "running")
+
+    def test_pause_leaves_a_scheduled_queue_unclaimed(self):
+        queue = PauseQueue([
+            {
+                "id": "sched",
+                "status": "pending",
+                "job_kind": "recheck",
+                "trigger": "schedule",
+                "requested_at": "2026-11-16T14:00:00+00:00",
+            },
+        ])
+        self.assertIsNone(self.worker["claim_next_run"](queue))
+        self.assertEqual(queue.rows[0]["status"], "pending")
+        self.assertFalse(queue.rpc_called)
+
+    def test_missing_pause_storage_holds_scheduled_jobs(self):
+        queue = PauseQueue([
+            {
+                "id": "sched",
+                "status": "pending",
+                "job_kind": "market_discovery",
+                "trigger": "schedule",
+                "requested_at": "2026-11-16T14:00:00+00:00",
+            },
+        ], pause_error=True)
+        self.assertIsNone(self.worker["claim_next_run"](queue))
+        self.assertEqual(queue.rows[0]["status"], "pending")
+
+    def test_paused_scheduler_does_not_read_markets(self):
+        class Guard(PauseQueue):
+            def table(self, name):
+                if name == "seeker_market_controls":
+                    raise AssertionError("scheduler must not queue while paused")
+                return super().table(name)
+
+        self.worker["enqueue_due_markets"](Guard([]))
+
+
 class MarketDiscoveryPathTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

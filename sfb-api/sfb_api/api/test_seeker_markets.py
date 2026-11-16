@@ -21,6 +21,10 @@ from sfb_api.api.seeker_markets import (
     market_control,
     market_detail,
     match_group,
+    pause_label,
+    pause_report,
+    resume_changes,
+    run_claimable,
     run_counts_text,
     usage_report,
     market_scope,
@@ -189,3 +193,62 @@ class MonitoringTests(unittest.TestCase):
         )
         self.assertEqual(fresh["code_version"], "f972a58")
         self.assertEqual(fresh["revision"], WORKER_REVISION)
+
+    def test_usage_label_names_the_flat_per_call_estimate(self):
+        report = usage_report({"succeeded": 63, "failed": 0}, [])
+        self.assertEqual(f"{report['estimated_cost_usd']:.3f}", "0.063")
+        self.assertEqual(
+            report["estimated_cost_label"],
+            "Estimated cost: $0.063 — calculated at $0.001 per successful call; not actual billed cost.",
+        )
+        self.assertEqual(report["failed"], 0)
+
+    def test_pause_blocks_queued_scheduled_jobs(self):
+        scheduled = {"status": "pending", "trigger": "schedule", "job_kind": "market_discovery"}
+        recheck = {"status": "pending", "trigger": "schedule", "job_kind": "recheck"}
+        consumer = {"status": "pending", "trigger": "user", "job_kind": "consumer_search"}
+        manual = {"status": "pending", "trigger": "user", "job_kind": "market_discovery"}
+        current = {"status": "running", "trigger": "schedule", "job_kind": "recheck"}
+        self.assertFalse(run_claimable(scheduled, True))
+        self.assertFalse(run_claimable(recheck, True))
+        self.assertTrue(run_claimable(consumer, True))
+        self.assertTrue(run_claimable(manual, True))
+        self.assertFalse(run_claimable(current, True))
+        self.assertTrue(run_claimable(scheduled, False))
+        self.assertEqual(pause_label(True, True), "Pausing—finishing current job")
+        self.assertEqual(pause_label(True, False), "Paused")
+        self.assertEqual(pause_label(False, False), "Running")
+        missing = pause_report(None, False)
+        self.assertFalse(missing["installed"])
+        self.assertTrue(missing["paused"])
+        self.assertEqual(missing["state"], "Paused")
+
+    def test_resume_creates_no_catch_up_burst(self):
+        changes = resume_changes(
+            [
+                {
+                    "market_id": "enabled-market",
+                    "enabled": True,
+                    "discovery_interval_minutes": 30,
+                    "recheck_interval_hours": 6,
+                    "next_discovery_at": "2026-11-16T12:00:00+00:00",
+                },
+                {
+                    "market_id": "paused-market",
+                    "enabled": False,
+                    "discovery_interval_minutes": 30,
+                    "recheck_interval_hours": 6,
+                },
+            ],
+            [
+                {"id": "old-schedule", "status": "pending", "trigger": "schedule", "job_kind": "market_discovery"},
+                {"id": "consumer", "status": "pending", "job_kind": "consumer_search", "trigger": "user"},
+                {"id": "still-running", "status": "running", "trigger": "schedule", "job_kind": "recheck"},
+            ],
+            NOW,
+        )
+        self.assertEqual(changes["cancel_run_ids"], ["old-schedule"])
+        self.assertEqual([row["market_id"] for row in changes["controls"]], ["enabled-market"])
+        self.assertTrue(changes["controls"][0]["enabled"])
+        self.assertGreater(changes["controls"][0]["next_discovery_at"], NOW.isoformat())
+        self.assertGreater(changes["controls"][0]["next_recheck_at"], NOW.isoformat())

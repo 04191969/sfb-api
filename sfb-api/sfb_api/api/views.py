@@ -15,9 +15,11 @@ from .seeker_markets import (
     assemble_markets,
     classify_heartbeat,
     is_market_discovery,
+    is_scheduled_run,
     market_control,
     market_detail,
     market_scope,
+    pause_report,
     present_run,
     usage_report,
 )
@@ -181,6 +183,49 @@ def _market_controls(sb):
         return []
 
 
+def _not_installed(exc):
+    text = str(exc).lower()
+    return (
+        "pgrst" in text
+        or "could not find" in text
+        or "does not exist" in text
+        or "seeker_global_pause" in text
+        or "set_seeker_global_pause" in text
+    )
+
+
+def _pause_row(sb):
+    try:
+        rows = (
+            sb.table("seeker_global_pause").select("id,paused").eq("id", "seeker").limit(1).execute().data
+            or []
+        )
+    except Exception:
+        return None
+    return rows[0] if rows else None
+
+
+def _scheduled_job_running(sb):
+    try:
+        rows = (
+            sb.table("seeker_runs").select("status,job_kind,trigger").eq("status", "running").limit(20).execute().data
+            or []
+        )
+    except Exception:
+        try:
+            rows = (
+                sb.table("seeker_runs").select("status,job_kind").eq("status", "running").limit(20).execute().data
+                or []
+            )
+        except Exception:
+            return False
+    return any(is_scheduled_run(row) for row in rows)
+
+
+def _pause_report(sb):
+    return pause_report(_pause_row(sb), _scheduled_job_running(sb))
+
+
 @api_view(["GET", "POST"])
 def seeker_market_control(request, market_id):
     """Pause or enable one market. A missing row stays paused."""
@@ -225,6 +270,25 @@ def seeker_market_control(request, market_id):
             )
         return _server_error(exc)
     return Response({"market_id": market, **market_control(row)})
+
+
+@api_view(["GET", "POST"])
+def seeker_pause(request):
+    """Pause or resume scheduled work. Queued scheduled jobs cannot start while paused."""
+    try:
+        sb = get_supabase()
+    except Exception as exc:
+        return _server_error(exc)
+    if request.method == "POST":
+        if "paused" not in request.data or not isinstance(request.data.get("paused"), bool):
+            return Response({"error": "paused must be true or false."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            sb.rpc("set_seeker_global_pause", {"should_pause": request.data["paused"]}).execute()
+        except Exception as exc:
+            if _not_installed(exc):
+                return Response(_pause_report(sb), status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            return _server_error(exc)
+    return Response(_pause_report(sb))
 
 
 @api_view(["GET"])
@@ -290,6 +354,7 @@ def seeker_markets(request):
             discovery_ready=_discovery_ready(sb),
             controls=_market_controls(sb),
         )
+        payload["pause"] = _pause_report(sb)
     except Exception as e:
         return _server_error(e)
     return Response(payload)
@@ -309,6 +374,7 @@ def seeker_market_detail(request, market_id):
         return _server_error(e)
     if payload is None:
         return Response({"error": "Market not found"}, status=status.HTTP_404_NOT_FOUND)
+    payload["pause"] = _pause_report(sb)
     return Response(payload)
 
 

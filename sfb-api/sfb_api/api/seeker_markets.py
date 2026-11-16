@@ -5,6 +5,7 @@ a verified zero is 0.
 """
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, ROUND_HALF_UP
 
 NOT_AVAILABLE = "Not available"
 WORKER_UNKNOWN = "Worker status unknown"
@@ -98,8 +99,9 @@ def _offer_state(listing_text):
 
 DEFAULT_DISCOVERY_MINUTES = 30
 DEFAULT_RECHECK_HOURS = 6
-# A published gpt-4o-mini call of this size is well under a cent. The figure is an estimate.
+# Flat estimate per successful call. Not token usage and not an invoice amount.
 AI_CALL_ESTIMATE_USD = 0.001
+PAUSING_LABEL = "Pausing—finishing current job"
 
 
 def market_control(row=None):
@@ -149,21 +151,106 @@ def match_group(match):
     return "held"
 
 
+def estimated_cost_label(succeeded, estimate_usd=AI_CALL_ESTIMATE_USD):
+    """Name the flat rate. This is not the amount OpenAI billed."""
+    count = int(succeeded or 0)
+    rate = Decimal(str(estimate_usd)).quantize(Decimal("0.001"))
+    amount = (Decimal(count) * rate).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    return (
+        f"Estimated cost: ${amount} — calculated at ${rate} per successful call; "
+        "not actual billed cost."
+    )
+
+
 def usage_report(usage_row, reservations, estimate_usd=AI_CALL_ESTIMATE_USD):
-    """Calls and an estimate. An uncertain call is neither a success nor a failure."""
+    """Calls and a flat estimate. An uncertain call is neither a success nor a failure."""
     usage_row = usage_row or {}
     succeeded = int(usage_row.get("succeeded") or 0)
     failed = int(usage_row.get("failed") or 0)
     uncertain = sum(1 for row in reservations or [] if row.get("state") == "uncertain")
     open_calls = sum(1 for row in reservations or [] if row.get("state") == "reserved")
+    rate = Decimal(str(estimate_usd)).quantize(Decimal("0.001"))
+    amount = (Decimal(succeeded) * rate).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
     return {
         "succeeded": succeeded,
         "failed": failed,
         "uncertain": uncertain,
         "open": open_calls,
-        "estimated_cost_usd": round(succeeded * estimate_usd, 4),
+        "estimated_cost_usd": float(amount),
+        "estimated_cost_label": estimated_cost_label(succeeded, estimate_usd),
         "cost_is_estimate": True,
     }
+
+
+def is_scheduled_run(run):
+    """Scheduler work only. A manual consumer search and a user discovery are not scheduled."""
+    return str((run or {}).get("trigger") or "") == "schedule"
+
+
+def run_claimable(run, paused):
+    """A paused Seeker does not start a scheduled job that is already queued."""
+    if str((run or {}).get("status") or "") != "pending":
+        return False
+    if paused and is_scheduled_run(run):
+        return False
+    return True
+
+
+def pause_label(paused, scheduled_job_running):
+    """The three labels the dashboard shows from the API's actual state."""
+    if not paused:
+        return "Running"
+    if scheduled_job_running:
+        return PAUSING_LABEL
+    return "Paused"
+
+
+def pause_report(row, scheduled_job_running):
+    """No pause row means scheduled work stays stopped."""
+    installed = row is not None
+    paused = True if not installed else bool(row.get("paused"))
+    running = bool(scheduled_job_running)
+    state = pause_label(paused, running)
+    if not installed:
+        message = "Global pause is not installed yet. Scheduled jobs stay stopped."
+    elif state == PAUSING_LABEL:
+        message = "Pause is on. The current scheduled job is finishing. Queued scheduled jobs will not start."
+    elif paused:
+        message = "Paused. Scheduled discovery and rechecks will not start. Manual consumer searches still run."
+    else:
+        message = "Running. Scheduling resumes only for markets that are already enabled."
+    return {
+        "installed": installed,
+        "paused": paused,
+        "state": state,
+        "scheduled_job_running": running,
+        "message": message,
+    }
+
+
+def resume_changes(controls, pending_runs, now):
+    """Drop queued scheduled jobs and set the next run in the future.
+
+    Markets that are individually paused stay paused. Missed intervals are not replayed.
+    """
+    cancel_ids = [
+        run.get("id")
+        for run in pending_runs or []
+        if run.get("id") and str(run.get("status") or "") == "pending" and is_scheduled_run(run)
+    ]
+    updates = []
+    for row in controls or []:
+        if not row.get("enabled") or not row.get("market_id"):
+            continue
+        minutes = int(row.get("discovery_interval_minutes") or DEFAULT_DISCOVERY_MINUTES)
+        hours = int(row.get("recheck_interval_hours") or DEFAULT_RECHECK_HOURS)
+        updates.append({
+            "market_id": row["market_id"],
+            "enabled": True,
+            "next_discovery_at": (now + timedelta(minutes=minutes)).isoformat(),
+            "next_recheck_at": (now + timedelta(hours=hours)).isoformat(),
+        })
+    return {"cancel_run_ids": cancel_ids, "controls": updates}
 
 
 def crash_reservation_outcome():
