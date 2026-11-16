@@ -41,13 +41,13 @@ FEED = """<?xml version="1.0"?>
 
 
 class SourceListTests(unittest.TestCase):
-    def test_marketplace_and_lkq_are_not_searched(self):
+    def test_marketplace_uses_index_and_lkq_is_not_searched(self):
         ids = {row["id"] for row in accessible_sources()}
-        self.assertNotIn("facebook", ids)
+        self.assertIn("facebook", ids)
         self.assertNotIn("lkq", ids)
         self.assertEqual(
             {row["id"] for row in unavailable_sources()},
-            {"facebook", "lkq", "carpart", "row52"},
+            {"lkq", "carpart", "row52"},
         )
         self.assertNotIn("carpart", ids)
         self.assertNotIn("row52", ids)
@@ -268,9 +268,9 @@ class FindTests(unittest.TestCase):
             read=lambda _raw, _vehicle: None,
         )
         brave = [url for url in called if "search.brave.com" in url]
-        self.assertEqual(len(brave), 2)
-        self.assertIn("rennlist.com", brave[0])
-        self.assertTrue(any(row.get("site") == "rennlist.com" for row in found["listings"]))
+        self.assertEqual(len(brave), 1)
+        self.assertIn("facebook.com", brave[0])
+        self.assertFalse(any(row.get("site") == "rennlist.com" for row in found["listings"]))
         self.assertTrue(any(row["source"] == "brave" for row in found["skipped"]))
         self.assertNotIn("bimmerforums.com", " ".join(brave))
         self.assertNotIn("car-part.com", " ".join(brave))

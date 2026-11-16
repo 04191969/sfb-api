@@ -327,6 +327,8 @@ def add_assessment(found, evidence=None, today=None, confirm_fitment=None):
     listings = found.get("listings") or []
     from .assessment import part_number_of
 
+    assessed_on = today or datetime.now(timezone.utc).date()
+    observed = datetime(assessed_on.year, assessed_on.month, assessed_on.day, 12, tzinfo=timezone.utc)
     numbers = [part_number_of(item) for item in listings if part_number_of(item)]
     try:
         interchange = store.interchange_for(numbers)
@@ -334,7 +336,7 @@ def add_assessment(found, evidence=None, today=None, confirm_fitment=None):
         interchange = []
     fitment_answers = {}
     qualifying = _classify_rows(listings, request, confirm_fitment, fitment_answers, interchange)
-    rows = [evidence_row(item) for item in listings]
+    rows = [evidence_row(item, observed_at=observed) for item in listings]
     rows = [row for row in rows if row]
     saved = True
     try:
@@ -365,7 +367,7 @@ def add_assessment(found, evidence=None, today=None, confirm_fitment=None):
         interchange,
     ))
     for item in listings:
-        record = evidence_row(item) or item
+        record = evidence_row(item, observed_at=observed) or item
         record["identifiers"] = item.get("identifiers")
         record["configuration"] = item.get("configuration")
         record["side"] = item.get("side")
@@ -373,7 +375,7 @@ def add_assessment(found, evidence=None, today=None, confirm_fitment=None):
         record["request_match"] = item.get("request_match")
         record["fitment_claims"] = item.get("fitment_claims")
         item["assessment"] = assess_listing(
-            record, stored, interchange, today=today, qualifying_keys=qualifying,
+            record, stored, interchange, today=assessed_on, qualifying_keys=qualifying,
         )
     reader = found.get("reader")
     if isinstance(reader, list):

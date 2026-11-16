@@ -2,8 +2,8 @@
 
 Craigslist is read from city RSS feeds. Reddit is read from its public JSON
 search, and only the subs for that make. Forums are read from Brave's public
-search, one site at a time. Facebook Marketplace and LKQ have no public feed,
-so they are listed and never fetched.
+search, one site at a time. Facebook uses public search-index item results,
+not a feed or authenticated Marketplace access.
 """
 
 import json
@@ -18,11 +18,6 @@ ROCKAUTO_RSS = "https://www.rockauto.com/RSS/vehiclefeeds.php"
 OLD_CARS_LIVE = "https://api.oldcarsdata.com/auctions/live"
 
 UNAVAILABLE = (
-    {
-        "id": "facebook",
-        "name": "Facebook Marketplace",
-        "reason": "No public API or RSS. Groups are not indexed either.",
-    },
     {
         "id": "lkq",
         "name": "LKQ Pick Your Part",
@@ -52,6 +47,7 @@ def search_text(part_name, make="", model="", year=""):
 def accessible_sources():
     """Sources a search is allowed to call. Unavailable sites are not in this list."""
     rows = [
+        {"id": "facebook", "name": "Facebook Marketplace", "method": "site-search", "focus": "Publicly indexed item pages; availability unconfirmed"},
         {"id": "ebay", "name": "eBay", "method": "api", "focus": "Parts category 6030"},
         {"id": "oldcarsdata", "name": "OldCarsData.com", "method": "api", "focus": "Collector auctions"},
         {"id": "rockauto", "name": "RockAuto", "method": "rss", "focus": "Wholesaler closeout"},
@@ -378,6 +374,66 @@ def brave_forum_url(part_name, domain):
     """One public Brave search for one forum. A combined OR query drops the other sites."""
     query = f'site:{domain} "for sale" {part_name}'
     return BRAVE_SEARCH + "?" + urlencode({"q": query})
+
+
+def facebook_search_url(part_name, make="", model="", year=""):
+    return BRAVE_SEARCH + "?" + urlencode({
+        "q": "site:facebook.com/marketplace/item/ " + search_text(part_name, make, model, year)
+    })
+
+
+def _indexed_excerpt(title, item_id, snippet):
+    """The result description, or the item name left after the index breadcrumb."""
+    text = " ".join(str(snippet or "").split())
+    if not text:
+        text = " ".join(str(title or "").split())
+        text = re.sub(r"^Facebook Marketplace\s+", "", text, flags=re.I)
+        text = re.sub(
+            r"facebook\.com\s*[›>]\s*marketplace\s*[›>]\s*item\s*[›>]\s*"
+            + re.escape(str(item_id))
+            + r"\s*",
+            "",
+            text,
+            count=1,
+            flags=re.I,
+        )
+    return text[:1500]
+
+
+def facebook_results(page, limit=8):
+    """Individual indexed items only; snippets never establish live availability."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(page or "", "html.parser")
+    found, seen = [], set()
+    for anchor in soup.find_all("a", href=True):
+        parsed = urlparse(anchor["href"])
+        if parsed.scheme not in ("http", "https") or parsed.hostname not in (
+            "facebook.com", "www.facebook.com", "m.facebook.com"
+        ):
+            continue
+        match = re.fullmatch(r"/marketplace/item/([0-9]+)/?", parsed.path)
+        if not match or match[1] in seen:
+            continue
+        title = anchor.get_text(" ", strip=True)
+        if not title:
+            continue
+        block = anchor.find_parent(class_=lambda c: c and "snippet" in c.split())
+        description = block.select_one(".snippet-description, .snippet-content .description") if block else None
+        snippet = description.get_text(" ", strip=True) if description else ""
+        excerpt = _indexed_excerpt(title, match[1], snippet)
+        seen.add(match[1])
+        found.append({
+            "source": "facebook", "item_id": match[1],
+            "url": f"https://www.facebook.com/marketplace/item/{match[1]}/",
+            "title": (excerpt or title)[:180], "snippet": excerpt,
+            "evidence_origin": "public_search_index", "availability": "unconfirmed",
+            "source_note": "Search-index excerpt; item page not read; availability unconfirmed. Any displayed price is an asking-price claim.",
+            "sale_status": "asking", "identifiers": [],
+        })
+        if len(found) >= limit:
+            break
+    return found
 
 
 def _on_domain(url, domain):

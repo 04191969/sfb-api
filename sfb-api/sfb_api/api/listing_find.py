@@ -19,6 +19,8 @@ from .listing_sources import (
     accessible_sources,
     brave_forum_url,
     brave_results,
+    facebook_search_url,
+    facebook_results,
     craigslist_city_url,
     forum_source_id,
     SHARED_SITES,
@@ -306,6 +308,8 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
     if not _out_of_time(skipped, time_left):
         listings.extend(_safe("rennlist", RENNLIST_RSS, part_name, get, pause, skipped, time_left=time_left))
     if not _out_of_time(skipped, time_left):
+        listings.extend(_facebook(part_name, make, model, year, get, pause, skipped, time_left))
+    if not _out_of_time(skipped, time_left):
         listings.extend(_forums(part_name, make, get, pause, skipped, time_left=time_left))
     if not _out_of_time(skipped, time_left):
         listings.extend(_shared_listings(part_name, get, pause, skipped, time_left=time_left))
@@ -340,6 +344,8 @@ def _money_label(amount, currency):
 
 def _source_note(item):
     notes = []
+    if item.get("source_note"):
+        notes.append(item["source_note"])
     price = _money_label(item.get("price_amount"), item.get("price_currency"))
     if price:
         notes.append("price " + price)
@@ -393,6 +399,10 @@ def keep_source_facts(listings, reader):
         source = by_url.get(row.get("link") or row.get("url") or "")
         if not source:
             continue
+        if source.get("source") == "facebook":
+            for key in ("source", "evidence_origin", "availability", "source_note", "snippet", "sale_status"):
+                row[key] = source.get(key)
+            row["oem_number"] = "Not listed"
         if source.get("price_amount"):
             row["price"] = _money_label(source["price_amount"], source.get("price_currency"))
             row["price_amount"] = source["price_amount"]
@@ -425,7 +435,27 @@ def _read_listings(raw_text, vehicle, timeout=30):
 def _forums(part_name, make, get, pause, skipped, max_sites=FORUM_LIMIT, time_left=None):
     """Read a few forums from Brave, one site per query. A refusal stops the rest."""
     domains = get_forum_sites(make)[:max_sites]
+    if any(row.get("source") == "brave" for row in skipped):
+        return []
     return _site_search(part_name, domains, get, pause, skipped, time_left=time_left)[:12]
+
+
+def _facebook(part_name, make, model, year, get, pause, skipped, time_left):
+    if _out_of_time(skipped, time_left):
+        return []
+    try:
+        page = fetch_catalog(facebook_search_url(part_name, make, model, year),
+                             timeout=_call_timeout(time_left), get=get, pause=pause,
+                             retry_rate_limit=False)
+    except CatalogBlocked as exc:
+        skipped.append({"source": "brave", "reason": str(exc)})
+        skipped.append({"source": "facebook", "reason": "Public search index refused the request."})
+        return []
+    except CatalogMissing:
+        skipped.append({"source": "facebook", "reason": "Public search index unavailable."})
+        return []
+    pause(2)
+    return [item for item in facebook_results(page) if keep_listing(item, part_name)]
 
 
 def _shared_listings(part_name, get, pause, skipped, time_left=None):
