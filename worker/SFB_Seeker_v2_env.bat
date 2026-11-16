@@ -451,9 +451,32 @@ def listing_allowed(url, title, body):
     return True
 
 
-def is_item_page(url):
+def _url_path(url):
+    raw = (url or "").strip()
+    if "://" not in raw:
+        raw = "https://example.test/" + raw.lstrip("/")
+    return urlsplit(raw).path.lower()
+
+
+def is_catalog_page(url):
+    """A product, search, category, or model page. It is a source, not an offer."""
     url_l = (url or "").lower()
-    return any(token in url_l for token in ("/itm/", "/listing/", "/item/", "/marketplace/item", "/p/"))
+    path = _url_path(url)
+    if re.search(r"reverb\.com/(?:p|m)/", url_l):
+        return True
+    if "/itm/" in path or "/marketplace/item" in path or re.search(r"/item/\d+", path):
+        return False
+    return any(marker in path for marker in (
+        "/sch/", "/search", "/category", "/categories", "/browse", "/model/",
+    ))
+
+
+def is_item_page(url):
+    """One seller's listing. A product or search page is not one."""
+    if is_catalog_page(url):
+        return False
+    url_l = (url or "").lower()
+    return any(token in url_l for token in ("/itm/", "/listing/", "/item/", "/marketplace/item"))
 
 
 # A web-search excerpt is not evidence that a listing is still for sale.
@@ -584,6 +607,33 @@ def similar_sections(html):
 
 def excise_similar_sections(html):
     return SIMILAR_SECTION.sub(" ", html or "")
+
+
+def catalog_offer_links(html, query, page_url):
+    """Individual listings linked from a model or search page. The page itself is not one."""
+    source = excise_similar_sections(html or "")
+    page_matches = text_has_model(plain_page_text(source), query)
+    found = []
+    seen = set()
+    anchors = re.findall(r'(?is)<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', source)
+    for href, label in anchors:
+        url = canonical_item_url(href, page_url)
+        if not url or url in seen or not is_item_page(url) or is_catalog_page(url):
+            continue
+        if url.rstrip("/") == (canonical_item_url(page_url) or page_url or "").rstrip("/"):
+            continue
+        text = plain_page_text(label)
+        words = [
+            word for word in re.findall(r"[a-z0-9]{3,}", text.lower())
+            if word not in DETAIL_STOP
+        ]
+        if words and not text_has_model(text, query):
+            continue
+        if not words and not page_matches:
+            continue
+        seen.add(url)
+        found.append({"url": url, "title": text[:180] or "Listing", "text": text[:500]})
+    return found
 
 
 def similar_item_links(html, query, page_url):
@@ -1102,6 +1152,14 @@ def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="
             else:
                 rejected.append(record)
             continue
+        if is_catalog_page(url):
+            html = fetch_html(url)
+            opened += 1
+            links = []
+            if not page_unreadable(html):
+                links = catalog_offer_links(html, item_query, url)
+            _queue_similar(queue, inspected, links, url, item_query)
+            continue
         if not is_item_page(url):
             continue
         info = inspect_listing_html(fetch_html(url), item_query, url)
@@ -1141,7 +1199,7 @@ def expand_candidates(seeds, query, fetch_html, budget=PAGE_BUDGET, buyer_text="
     incomplete = ""
     if len(qualifying) < target and queue and (opened >= budget or attempts >= attempt_cap):
         incomplete = "the page budget was used before every candidate was opened"
-    return qualifying + rejected, incomplete
+    return unique_offers(qualifying + rejected), incomplete
 
 
 def listing_seeds(rows, limit):
@@ -1157,7 +1215,7 @@ def listing_seeds(rows, limit):
             continue
         if not listing_allowed(url, title, body):
             continue
-        if not (is_item_page(direct) or facebook_profile_url(direct)):
+        if not (is_item_page(direct) or facebook_profile_url(direct) or is_catalog_page(direct)):
             continue
         seen_urls.add(direct)
         seeds.append({"url": direct, "title": title, "body": body})
@@ -1767,6 +1825,31 @@ def _save_source(sb, table, url, row):
     return sb.table(table).insert(row).execute().data[0]["id"]
 
 
+def offer_identity(url):
+    """Same platform and item id are one offer, whatever slug or page linked to it."""
+    identity = source_identity(url)
+    platform = extract_platform(url)
+    if identity:
+        return (platform, identity)
+    canonical = canonical_item_url(url) or (url or "").split("?")[0]
+    return (platform, canonical.rstrip("/").lower())
+
+
+def unique_offers(rows):
+    kept = []
+    seen = set()
+    for row in rows or []:
+        url = row.get("url") or ""
+        if not url or is_catalog_page(url):
+            continue
+        key = offer_identity(url)
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(row)
+    return kept
+
+
 def unique_by_url(rows):
     kept = []
     seen_urls = set()
@@ -1789,8 +1872,29 @@ def stored_buyer(row):
 
 
 _BUY_INTENT = re.compile(
-    r"(?i)\b(?:looking to buy|want to buy|wanted to buy|willing to buy|in search of|wtb|looking for)\b"
+    r"(?i)\b(?:looking to buy|want to buy|wanted to buy|willing to buy|in search of|wtb)\b"
 )
+_LOOKING_FOR = re.compile(r"(?i)\blooking for\b")
+_MEDIA_BUYER = re.compile(
+    r"(?i)(?:youtube\.com/watch|youtube\.com/shorts|youtube\.com/embed|youtu\.be/)"
+)
+_NOT_A_REQUEST = re.compile(
+    r"(?i)\b(?:tutorial|how to play|lyrics|official video|music video|guitar lesson|review)\b"
+)
+_ABSTRACT_WORDS = {
+    "love", "lover", "heart", "baby", "girl", "boy", "friend", "someone",
+    "happiness", "dream", "dreams", "night", "life", "time", "way", "thing",
+    "things", "one", "answers", "trouble", "home", "world", "music", "song",
+    "video", "tutorial", "review", "you", "me", "him", "her", "them", "new",
+    "looking", "want", "wanted", "willing", "buy", "wtb", "search",
+}
+_PRODUCT_NOUNS = {
+    "guitar", "guitars", "bass", "amp", "amplifier", "pedal", "keyboard", "piano",
+    "drum", "drums", "violin", "cello", "ukulele", "mandolin", "synth", "synthesizer",
+    "camera", "lens", "speaker", "speakers", "turntable", "headphone", "headphones",
+    "receiver", "subwoofer", "watch", "card", "cards", "coin", "coins", "comic",
+    "comics", "record", "records", "vinyl", "memorabilia", "pickup", "pickups",
+}
 _SELL_INTENT = re.compile(r"(?i)\b(?:selling|for sale|wts|up for sale)\b|\bfs\s*:")
 _LOOKING_FOR_BUYER = re.compile(r"(?i)\blooking for (?:a )?buyers?\b")
 _RELATED_LISTINGS = re.compile(
@@ -1847,14 +1951,47 @@ def _negated_at(clause, start):
     return _NEGATION_BEFORE.search(prefix) is not None
 
 
+def _content_words(text):
+    skips = {"a", "an", "the", "for", "to", "of", "and", "or", "my", "your", "in", "on"}
+    return [
+        word for word in re.findall(r"[A-Za-z0-9]+", text or "")
+        if word.casefold() not in skips
+    ]
+
+
+def _identifiable_item(text):
+    """A product the author can acquire. A song, feeling, or bare search word is not one."""
+    words = _content_words(text)
+    if not words:
+        return False
+    if any(word.casefold() in _PRODUCT_NOUNS for word in words):
+        return True
+    specific = [
+        word for word in words
+        if word.casefold() not in _ABSTRACT_WORDS and (len(word) >= 4 or any(char.isdigit() for char in word))
+    ]
+    return bool(specific)
+
+
+def _looking_for_item(clause):
+    """'Looking for' needs a product. A title or a search for a buyer does not qualify."""
+    if _LOOKING_FOR_BUYER.search(clause or "") or _NOT_A_REQUEST.search(clause or ""):
+        return False
+    match = _LOOKING_FOR.search(clause or "")
+    if not match or _negated_at(clause, match.start()):
+        return False
+    return _identifiable_item(clause[match.end():])
+
+
 def _positive_buy(clause):
+    if _NOT_A_REQUEST.search(clause or "") and not _BUY_INTENT.search(clause or ""):
+        return False
     for match in _BUY_INTENT.finditer(clause or ""):
-        if re.search(r"(?i)\blooking for\b", match.group(0)) and _LOOKING_FOR_BUYER.search(clause or ""):
-            continue
         if _negated_at(clause, match.start()):
             continue
-        return True
-    return False
+        if _identifiable_item(clause):
+            return True
+    return _looking_for_item(clause)
 
 
 def _positive_sell(clause):
@@ -1883,10 +2020,12 @@ def _clause_intent(clause):
 def _split_mixed_clause(clause):
     marks = []
     for match in _BUY_INTENT.finditer(clause or ""):
-        if re.search(r"(?i)\blooking for\b", match.group(0)) and _LOOKING_FOR_BUYER.search(clause or ""):
+        if _negated_at(clause, match.start()) or not _identifiable_item(clause):
             continue
-        if not _negated_at(clause, match.start()):
-            marks.append((match.start(), "buy"))
+        marks.append((match.start(), "buy"))
+    looking = _LOOKING_FOR.search(clause or "")
+    if looking and _looking_for_item(clause):
+        marks.append((looking.start(), "buy"))
     buyer_hunt = _LOOKING_FOR_BUYER.search(clause or "")
     if buyer_hunt and not _negated_at(clause, buyer_hunt.start()):
         marks.append((buyer_hunt.start(), "sell"))
@@ -1953,6 +2092,8 @@ def author_intent(text, url=""):
             pending.append(clause)
     wanted = _join_clauses(buys)
     offered = _join_clauses(sells)
+    if _MEDIA_BUYER.search(url or "") or (wanted and not _identifiable_item(wanted)):
+        wanted = ""
     if wanted and offered:
         role = "mixed"
     elif wanted:
@@ -1981,12 +2122,28 @@ def as_matching_buyer(buyer):
     return kept
 
 
-def public_post_roles(post):
+def relevant_to_market(text, market_name):
+    """The wanted item has to be the market's item. Another request stays unrelated."""
+    tokens = [
+        token for token in re.findall(r"[a-z0-9]+", (market_name or "").lower())
+        if len(token) >= 3 and token not in {"the", "for", "and", "guitar", "guitars"}
+    ]
+    if not tokens:
+        return True
+    blob = (text or "").lower()
+    return all(re.search(rf"\b{re.escape(token)}\b", blob) for token in tokens)
+
+
+def public_post_roles(post, market_name=""):
     """Split a public page into a buyer request, a seller offer, neither, or both."""
     original = (post or {}).get("text") or ""
     intent = author_intent(original, (post or {}).get("url") or "")
     buyer = seller = None
-    if intent["role"] in ("buy", "mixed") and intent["wanted"]:
+    if (
+        intent["role"] in ("buy", "mixed")
+        and intent["wanted"]
+        and relevant_to_market(intent["wanted"], market_name)
+    ):
         buyer = dict(post)
         buyer["source_text"] = original
         buyer["text"] = intent["wanted"]
@@ -2039,7 +2196,7 @@ def buyer_queries_for_offers(sellers, limit):
     queries = []
     overflow = False
     for seller in sellers or []:
-        if seller.get("cross_post"):
+        if seller.get("cross_post") or is_catalog_page(seller.get("url") or ""):
             continue
         if (seller.get("availability") or "unconfirmed") == "ended":
             continue
@@ -2053,16 +2210,25 @@ def buyer_queries_for_offers(sellers, limit):
     return queries, overflow
 
 
-def market_comparisons(buyers, sellers):
+def market_comparisons(buyers, sellers, market_name=""):
     """Pair stored and newly found requests with stored and newly found offers."""
     pairs = []
     offer_rows = [
-        seller for seller in unique_by_url(sellers)
+        seller for seller in unique_offers(sellers)
         if not seller.get("cross_post")
     ]
     for buyer in unique_by_url(buyers):
         buyer = as_matching_buyer(buyer)
         if not buyer:
+            continue
+        platform = str(buyer.get("platform") or "").casefold()
+        buyer_url = str(buyer.get("url") or "").casefold()
+        if (
+            market_name
+            and platform != "sfb"
+            and "searchfindbuy.local" not in buyer_url
+            and not relevant_to_market(buyer.get("text") or "", market_name)
+        ):
             continue
         for seller in offer_rows:
             if buyer.get("url") and buyer.get("url") == seller.get("url"):
@@ -2230,9 +2396,9 @@ def _remember_offer(sb, market_id, offer):
     })
 
 
-def _take_public_post(sb, market_id, post, buyers, sellers, seen):
+def _take_public_post(sb, market_id, post, buyers, sellers, seen, market_name=""):
     """Save a public page by what its author is doing. A search hit is not a buyer."""
-    buyer, offer = public_post_roles(post)
+    buyer, offer = public_post_roles(post, market_name)
     if buyer:
         _remember_buyer(sb, market_id, buyer)
         buyers.append(buyer)
@@ -2288,7 +2454,7 @@ def run_market_discovery(sb, openai_client, seen, run):
     for post in search_wtb_posts(f"\"{market_name}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
         if is_market_discovery_run({"search_query": post.get("text") or ""}):
             continue
-        _take_public_post(sb, market_id, post, buyers, discovered_offers, seen)
+        _take_public_post(sb, market_id, post, buyers, discovered_offers, seen, market_name)
     found = search_listings(market_name, seen, max_keep=8, buyer_text=market_name)
     sellers = found["listings"] + discovered_offers
     observed = datetime.now(timezone.utc).isoformat()
@@ -2317,8 +2483,10 @@ def run_market_discovery(sb, openai_client, seen, run):
         for post in search_wtb_posts(f"\"{query}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
             if is_market_discovery_run({"search_query": post.get("text") or ""}):
                 continue
-            _take_public_post(sb, market_id, post, buyers, sellers, seen)
-    compared = market_comparisons(buyers + existing_buyers, sellers + existing_sellers)
+            _take_public_post(sb, market_id, post, buyers, sellers, seen, market_name)
+    compared = market_comparisons(
+        buyers + existing_buyers, sellers + existing_sellers, market_name,
+    )
     verified = 0
     try:
         if compared and usage_blocked(sb):
@@ -3048,6 +3216,93 @@ def check_rules():
     curly_sale = author_intent(curly)
     assert curly_sale["role"] == "sell"
     assert curly_sale["wanted"] == ""
+    song = "Jody Watley — Looking For A New Love"
+    song_url = "https://www.youtube.com/watch?v=qpMj8c_Imss"
+    assert author_intent(song, song_url)["role"] == "unresolved"
+    assert as_matching_buyer({"text": song, "url": song_url, "platform": "youtube", "title": song}) is None
+    genuine = "WTB Epiphone USA Map.\nBudget: $850 plus shipping, firm maximum.\nMust include the original case."
+    genuine_intent = author_intent(genuine)
+    assert genuine_intent["role"] == "buy"
+    assert genuine_intent["source"] == genuine
+    assert "Budget: $850 plus shipping, firm maximum." in genuine_intent["wanted"]
+    assert "Must include the original case." in genuine_intent["wanted"]
+    product_page = "https://reverb.com/p/epiphone-usa-map-guitar-reissue"
+    direct_item = "https://reverb.com/item/97393148-epiphone-usa-map"
+    linked_item = "https://reverb.com/item/97393148-epiphone-usa-map-guitar"
+    assert is_catalog_page(product_page) is True
+    assert is_item_page(product_page) is False
+    item_pad = "Epiphone USA Map guitar reissue in stock. " * 8
+    item_html = (
+        "<html><body><h1>Epiphone USA Map guitar</h1>"
+        "<p>Buy it now. Add to cart. New Price $850. Located in Austin, TX.</p>"
+        + item_pad + "</body></html>"
+    )
+    product_html = (
+        "<html><body><h1>Epiphone USA Map Guitar Reissue</h1>"
+        "<p>Shop new and used listings. From $800. Buy it now.</p>"
+        f'<a href="{linked_item}">Epiphone USA Map guitar</a>'
+        + item_pad + "</body></html>"
+    )
+    empty_product = (
+        "<html><body><h1>Epiphone USA Map Guitar Reissue</h1>"
+        "<p>From $800. Buy it now. No current listings.</p>"
+        + item_pad + "</body></html>"
+    )
+    catalog_pages = {
+        product_page: product_html,
+        direct_item: item_html,
+        linked_item: item_html,
+    }
+    followed, _followed_incomplete = expand_candidates(
+        [{"url": product_page, "title": "Epiphone USA Map Guitar Reissue", "body": "From $800"}],
+        "Epiphone USA Map",
+        lambda url: catalog_pages.get(url, ""),
+    )
+    assert [item["url"] for item in followed] == [linked_item]
+    assert followed[0]["price"] == 850
+    assert followed[0]["discovery_url"] == product_page
+    assert followed[0]["availability"] == "available"
+    together, _together_incomplete = expand_candidates(
+        [
+            {"url": product_page, "title": "Epiphone USA Map Guitar Reissue", "body": "From $800"},
+            {"url": direct_item, "title": "Epiphone USA Map guitar", "body": "New Price $850"},
+        ],
+        "Epiphone USA Map",
+        lambda url: catalog_pages.get(url, ""),
+    )
+    assert len(together) == 1
+    assert source_identity(together[0]["url"]) == "97393148"
+    assert product_page not in [item["url"] for item in together]
+    none_found, _none_incomplete = expand_candidates(
+        [{"url": product_page, "title": "Epiphone USA Map Guitar Reissue", "body": "From $800"}],
+        "Epiphone USA Map",
+        lambda url: empty_product if url == product_page else "",
+    )
+    assert none_found == []
+    stored_song = {"text": song, "url": song_url, "platform": "youtube", "title": song}
+    stored_product = {
+        "url": product_page,
+        "text": "Epiphone USA Map Guitar Reissue From $800 Buy it now",
+        "availability": "available",
+        "title": "Epiphone USA Map Guitar Reissue",
+    }
+    stored_item = {
+        "url": direct_item,
+        "text": "Epiphone USA Map guitar for sale",
+        "availability": "available",
+        "price": 850,
+        "title": "Epiphone USA Map guitar",
+    }
+    stored_buyer = {
+        "text": genuine,
+        "url": "https://forum.example/epiphone-wtb",
+        "platform": "web",
+        "title": "WTB Epiphone USA Map",
+    }
+    assert market_comparisons([stored_song], [stored_item], "Epiphone USA Map") == []
+    assert market_comparisons([stored_buyer], [stored_product], "Epiphone USA Map") == []
+    stored_pairs = market_comparisons([stored_buyer], [stored_product, stored_item], "Epiphone USA Map")
+    assert [seller["url"] for _buyer, seller in stored_pairs] == [direct_item]
     misclassified = {"text": selling, "url": facebook, "platform": "facebook", "title": selling}
     assert market_comparisons([misclassified], [{"url": f"https://reverb.com/item/{i}", "text": "for sale"} for i in range(4)]) == []
     priced = dict(stale)

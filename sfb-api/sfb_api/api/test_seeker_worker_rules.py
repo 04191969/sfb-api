@@ -612,3 +612,172 @@ class BuyerIntentTests(unittest.TestCase):
             "platform": "web",
             "title": "sale",
         }))
+
+
+YOUTUBE_SONG = "Jody Watley — Looking For A New Love"
+YOUTUBE_URL = "https://www.youtube.com/watch?v=qpMj8c_Imss"
+REVERB_PRODUCT = "https://reverb.com/p/epiphone-usa-map-guitar-reissue"
+REVERB_ITEM = "https://reverb.com/item/97393148-epiphone-usa-map"
+REVERB_ITEM_SLUG = "https://reverb.com/item/97393148-epiphone-usa-map-guitar"
+GENUINE_WTB = "\n".join((
+    "WTB Epiphone USA Map.",
+    "Budget: $850 plus shipping, firm maximum.",
+    "Must include the original case.",
+))
+
+
+class ProductIntentTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = load_worker()
+
+    def test_youtube_song_is_not_a_buyer(self):
+        intent = self.worker["author_intent"](YOUTUBE_SONG, YOUTUBE_URL)
+        self.assertEqual(intent["role"], "unresolved")
+        self.assertEqual(intent["wanted"], "")
+        self.assertEqual(intent["source"], YOUTUBE_SONG)
+        buyer, offer = self.worker["public_post_roles"]({
+            "title": YOUTUBE_SONG,
+            "text": YOUTUBE_SONG,
+            "url": YOUTUBE_URL,
+            "platform": "youtube",
+        }, "Epiphone USA Map")
+        self.assertIsNone(buyer)
+        self.assertIsNone(offer)
+        self.assertIsNone(self.worker["as_matching_buyer"]({
+            "title": YOUTUBE_SONG,
+            "text": YOUTUBE_SONG,
+            "url": YOUTUBE_URL,
+            "platform": "youtube",
+        }))
+
+    def test_genuine_product_request_keeps_requirements(self):
+        intent = self.worker["author_intent"](GENUINE_WTB)
+        self.assertEqual(intent["role"], "buy")
+        self.assertEqual(intent["source"], GENUINE_WTB)
+        self.assertIn("Epiphone USA Map", intent["wanted"])
+        self.assertIn("Budget: $850 plus shipping, firm maximum.", intent["wanted"])
+        self.assertIn("Must include the original case.", intent["wanted"])
+        cap = self.worker["buyer_price_cap"](intent["wanted"])
+        self.assertEqual(cap["limit"], 850)
+        self.assertTrue(cap["plus_shipping"])
+        buyer, _offer = self.worker["public_post_roles"]({
+            "title": "WTB Epiphone USA Map",
+            "text": GENUINE_WTB,
+            "url": "https://forum.example/epiphone-wtb",
+            "platform": "web",
+        }, "Epiphone USA Map")
+        self.assertEqual(buyer["source_text"], GENUINE_WTB)
+        self.assertIn("Must include the original case.", buyer["text"])
+        unrelated, _offer = self.worker["public_post_roles"]({
+            "title": "WTB Fender Stratocaster",
+            "text": "WTB Fender Stratocaster.",
+            "url": "https://forum.example/fender-wtb",
+            "platform": "web",
+        }, "Epiphone USA Map")
+        self.assertIsNone(unrelated)
+
+    def _item_html(self):
+        pad = "Epiphone USA Map guitar reissue in stock. " * 8
+        return (
+            "<html><body><h1>Epiphone USA Map guitar</h1>"
+            "<p>Buy it now. Add to cart. New Price $850. Located in Austin, TX.</p>"
+            + pad + "</body></html>"
+        )
+
+    def _product_html(self, item_url):
+        pad = "Epiphone USA Map guitar reissue in stock. " * 8
+        return (
+            "<html><body><h1>Epiphone USA Map Guitar Reissue</h1>"
+            "<p>Shop new and used listings. From $800. Buy it now.</p>"
+            f'<a href="{item_url}">Epiphone USA Map guitar</a>'
+            + pad + "</body></html>"
+        )
+
+    def test_reverb_product_page_resolves_to_the_item(self):
+        worker = self.worker
+        pages = {
+            REVERB_PRODUCT: self._product_html(REVERB_ITEM_SLUG),
+            REVERB_ITEM_SLUG: self._item_html(),
+        }
+        found, incomplete = worker["expand_candidates"](
+            [{"url": REVERB_PRODUCT, "title": "Epiphone USA Map Guitar Reissue", "body": "From $800"}],
+            "Epiphone USA Map",
+            lambda url: pages.get(url, ""),
+        )
+        self.assertEqual(incomplete, "")
+        self.assertEqual([item["url"] for item in found], [REVERB_ITEM_SLUG])
+        self.assertEqual(found[0]["price"], 850)
+        self.assertEqual(found[0]["availability"], "available")
+        self.assertEqual(found[0]["discovery_url"], REVERB_PRODUCT)
+        self.assertNotEqual(found[0]["price"], 800)
+
+    def test_product_page_and_direct_item_are_one_offer(self):
+        pages = {
+            REVERB_PRODUCT: self._product_html(REVERB_ITEM_SLUG),
+            REVERB_ITEM: self._item_html(),
+            REVERB_ITEM_SLUG: self._item_html(),
+        }
+        found, _incomplete = self.worker["expand_candidates"](
+            [
+                {"url": REVERB_PRODUCT, "title": "Epiphone USA Map Guitar Reissue", "body": "From $800"},
+                {"url": REVERB_ITEM, "title": "Epiphone USA Map guitar", "body": "New Price $850"},
+            ],
+            "Epiphone USA Map",
+            lambda url: pages.get(url, ""),
+        )
+        self.assertEqual(len(found), 1)
+        self.assertEqual(self.worker["source_identity"](found[0]["url"]), "97393148")
+        self.assertNotIn(REVERB_PRODUCT, [item["url"] for item in found])
+
+    def test_product_page_without_a_verifiable_item_is_not_an_offer(self):
+        pad = "Epiphone USA Map guitar reissue model page. " * 8
+        empty = (
+            "<html><body><h1>Epiphone USA Map Guitar Reissue</h1>"
+            "<p>From $800. Buy it now. No current listings.</p>"
+            + pad + "</body></html>"
+        )
+        found, _incomplete = self.worker["expand_candidates"](
+            [{"url": REVERB_PRODUCT, "title": "Epiphone USA Map Guitar Reissue", "body": "From $800"}],
+            "Epiphone USA Map",
+            lambda url: empty,
+        )
+        self.assertEqual(found, [])
+
+    def test_stored_song_and_product_page_stay_out_of_matching(self):
+        song = {
+            "title": YOUTUBE_SONG,
+            "text": YOUTUBE_SONG,
+            "url": YOUTUBE_URL,
+            "platform": "youtube",
+        }
+        product = {
+            "url": REVERB_PRODUCT,
+            "title": "Epiphone USA Map Guitar Reissue",
+            "text": "From $800 Buy it now",
+            "availability": "available",
+            "price": 800,
+        }
+        item = {
+            "url": REVERB_ITEM,
+            "title": "Epiphone USA Map guitar",
+            "text": "Epiphone USA Map guitar for sale",
+            "availability": "available",
+            "price": 850,
+        }
+        buyer = {
+            "title": "WTB Epiphone USA Map",
+            "text": GENUINE_WTB,
+            "url": "https://forum.example/epiphone-wtb",
+            "platform": "web",
+        }
+        self.assertEqual(
+            self.worker["market_comparisons"]([song], [item, product], "Epiphone USA Map"),
+            [],
+        )
+        self.assertEqual(
+            self.worker["market_comparisons"]([buyer], [product], "Epiphone USA Map"),
+            [],
+        )
+        pairs = self.worker["market_comparisons"]([buyer, song], [product, item], "Epiphone USA Map")
+        self.assertEqual([seller["url"] for _buyer, seller in pairs], [REVERB_ITEM])
