@@ -1784,7 +1784,7 @@ def stored_buyer(row):
 
 
 def stored_seller(row):
-    availability = row.get("availability") or "unconfirmed"
+    """A saved available flag is not current until the item page is read again."""
     return {
         "title": (row.get("username") or "unknown")[:80],
         "text": row.get("listing_text") or "",
@@ -1792,8 +1792,11 @@ def stored_seller(row):
         "platform": row.get("source_platform") or "web",
         "price": row.get("price"),
         "shipping": row.get("shipping"),
-        "availability": availability,
-        "qualifying": availability == "available",
+        "availability": "unconfirmed",
+        "reported_availability": row.get("availability") or "",
+        "qualifying": False,
+        "stored": True,
+        "id": row.get("id"),
     }
 
 
@@ -1845,24 +1848,137 @@ def market_comparisons(buyers, sellers):
     return pairs
 
 
+def market_alias_ids(sections, market_id):
+    """Section ids for one confirmed market. A blank name does not attach other rows."""
+    market_id = str(market_id or "")
+    chosen = next((row for row in sections or [] if str(row.get("id") or "") == market_id), None)
+    if not chosen:
+        return {market_id} if market_id else set()
+    key = market_label(chosen.get("make"), chosen.get("model"), chosen.get("name"))[2]
+    if not key:
+        return {market_id}
+    return {
+        str(row.get("id"))
+        for row in sections or []
+        if row.get("id") and market_label(row.get("make"), row.get("model"), row.get("name"))[2] == key
+    }
+
+
+def section_market_key(sections, section_id):
+    section_id = str(section_id or "")
+    if not section_id:
+        return ""
+    for row in sections or []:
+        if str(row.get("id") or "") != section_id:
+            continue
+        key = market_label(row.get("make"), row.get("model"), row.get("name"))[2]
+        return key or f"id:{section_id}"
+    return f"id:{section_id}"
+
+
+def linked_record_ids(sections, matches, buyers, sellers, market_id):
+    """Records for this market. Mixed market links are left unassigned."""
+    target = section_market_key(sections, market_id)
+    by_buyer = {}
+    by_seller = {}
+    for match in matches or []:
+        market = section_market_key(sections, match.get("section_id"))
+        if not market:
+            continue
+        if match.get("buyer_post_id"):
+            by_buyer.setdefault(match["buyer_post_id"], set()).add(market)
+        if match.get("seller_listing_id"):
+            by_seller.setdefault(match["seller_listing_id"], set()).add(market)
+
+    def decide(row, linked):
+        markets = set(linked or ())
+        explicit = str(row.get("section_id") or "")
+        if explicit:
+            markets.add(section_market_key(sections, explicit))
+        if not markets or markets != {target}:
+            return False, False
+        return True, not explicit
+
+    buyer_ids = []
+    seller_ids = []
+    backfill = []
+    for row in buyers or []:
+        include, fill = decide(row, by_buyer.get(row.get("id"), set()))
+        if include:
+            buyer_ids.append(row.get("id"))
+        if fill:
+            backfill.append(("buyer_posts", row.get("id")))
+    for row in sellers or []:
+        include, fill = decide(row, by_seller.get(row.get("id"), set()))
+        if include:
+            seller_ids.append(row.get("id"))
+        if fill:
+            backfill.append(("seller_listings", row.get("id")))
+    return buyer_ids, seller_ids, backfill
+
+
 def load_market_records(sb, market_id):
-    buyer_rows = (
-        sb.table("buyer_posts")
-        .select("username,post_text,source_url,source_platform")
-        .eq("section_id", market_id)
-        .execute()
-        .data
-        or []
+    sections = sb.table("sections").select("id,name,make,model").execute().data or []
+    matches = sb.table("matches").select("buyer_post_id,seller_listing_id,section_id").execute().data or []
+    buyers = sb.table("buyer_posts").select(
+        "id,username,post_text,source_url,source_platform,section_id"
+    ).execute().data or []
+    sellers = sb.table("seller_listings").select(
+        "id,username,listing_text,source_url,source_platform,price,shipping,availability,section_id"
+    ).execute().data or []
+    buyer_ids, seller_ids, backfill = linked_record_ids(sections, matches, buyers, sellers, market_id)
+    for table, row_id in backfill:
+        if not row_id:
+            continue
+        sb.table(table).update({"section_id": market_id}).eq("id", row_id).execute()
+    buyer_map = {row.get("id"): row for row in buyers}
+    seller_map = {row.get("id"): row for row in sellers}
+    return (
+        [stored_buyer(buyer_map[row_id]) for row_id in buyer_ids if row_id in buyer_map],
+        [stored_seller(seller_map[row_id]) for row_id in seller_ids if row_id in seller_map],
     )
-    seller_rows = (
-        sb.table("seller_listings")
-        .select("username,listing_text,source_url,source_platform,price,shipping,availability")
-        .eq("section_id", market_id)
-        .execute()
-        .data
-        or []
-    )
-    return [stored_buyer(row) for row in buyer_rows], [stored_seller(row) for row in seller_rows]
+
+
+def refresh_stored_offer(seller, fetch_html):
+    """Read the item page. An unreadable page stays unconfirmed."""
+    checked = dict(seller)
+    checked["stored"] = True
+    checked["checked_now"] = True
+    url = seller.get("url") or ""
+    html = fetch_html(url) if url else ""
+    info = inspect_listing_html(html, seller.get("title") or seller.get("text") or "", url)
+    if not info.get("readable"):
+        checked["availability"] = "unconfirmed"
+        checked["qualifying"] = False
+        return checked
+    checked["availability"] = info.get("status") or "unconfirmed"
+    if info.get("price") is not None:
+        checked["price"] = info["price"]
+    if info.get("shipping") is not None:
+        checked["shipping"] = info["shipping"]
+    if info.get("text"):
+        checked["text"] = info["text"]
+    checked["qualifying"] = checked["availability"] == "available"
+    return checked
+
+
+def verify_stored_offer(seller, fetch_html):
+    if not seller.get("stored") or seller.get("checked_now"):
+        return seller
+    refreshed = refresh_stored_offer(dict(seller), fetch_html)
+    seller.clear()
+    seller.update(refreshed)
+    return seller
+
+
+def record_offer_observation(sb, seller):
+    if not seller.get("url"):
+        return
+    sb.table("seller_listings").update({
+        "availability": seller.get("availability") or "unconfirmed",
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "price": seller.get("price"),
+    }).eq("source_url", seller["url"]).execute()
 
 
 def _remember_buyer(sb, market_id, post):
@@ -1952,6 +2068,10 @@ def run_market_discovery(sb, openai_client, seen, run):
             for buyer, seller in compared:
                 if verified >= MATCH_TARGET:
                     break
+                seller = verify_stored_offer(seller, read_listing_html)
+                if seller.get("stored") and not seller.get("observation_saved"):
+                    record_offer_observation(sb, seller)
+                    seller["observation_saved"] = True
                 if not qualifies(seller, buyer.get("text") or ""):
                     print(f"    Rejected candidate, still searching: {(seller.get('title') or '')[:70]}")
                     continue
@@ -2573,6 +2693,36 @@ def check_rules():
     ], 4)
     assert offer_queries == ["Epiphone USA Map guitar"]
     assert overflow is False
+    legacy_sections = [
+        {"id": "market-1", "make": "Epiphone", "model": "USA Map"},
+        {"id": "alias-9", "make": "Epiphone", "model": "USA Map guitar"},
+        {"id": "other-2", "make": "Ford", "model": "Mustang"},
+    ]
+    legacy_ids, _legacy_sellers, legacy_backfill = linked_record_ids(
+        legacy_sections,
+        [
+            {"buyer_post_id": "legacy", "section_id": "alias-9"},
+            {"buyer_post_id": "mixed", "section_id": "alias-9"},
+            {"buyer_post_id": "mixed", "section_id": "other-2"},
+        ],
+        [
+            {"id": "legacy", "section_id": None},
+            {"id": "mixed", "section_id": None},
+        ],
+        [],
+        "market-1",
+    )
+    assert legacy_ids == ["legacy"]
+    assert legacy_backfill == [("buyer_posts", "legacy")]
+    stale = stored_seller({"id": "seller-1", "availability": "available", "source_url": "https://shop.example/item/old", "username": "Old"})
+    assert stale["qualifying"] is False
+    ended_page = "<html><body>" + ("This listing has ended. " * 20) + "</body></html>"
+    ended_offer = refresh_stored_offer(stale, lambda url: ended_page)
+    assert ended_offer["availability"] == "ended"
+    assert ended_offer["qualifying"] is False
+    unreadable_offer = refresh_stored_offer(stale, lambda url: "nope")
+    assert unreadable_offer["availability"] == "unconfirmed"
+    assert unreadable_offer["qualifying"] is False
     print("availability rules ok")
 
 

@@ -54,9 +54,7 @@ class Query:
     def execute(self):
         if self.op == "update":
             return Gate(data=[])
-        if self.filters.get("section_id") == "market-1":
-            return Gate(data=self.gate.rows.get(self.table, []))
-        return Gate(data=[])
+        return Gate(data=list(self.gate.rows.get(self.table, [])))
 
 
 class Database:
@@ -119,11 +117,12 @@ class MarketDiscoveryPathTests(unittest.TestCase):
     def setUpClass(cls):
         cls.worker = load_worker()
 
-    def _run(self, ai=None, blocked=False):
+    def _run(self, ai=None, blocked=False, listings=None, page=None, searches_enabled=True):
         worker = self.worker
         saved = []
         pairs = []
         searches = []
+        evaluations = []
         offer = {
             "title": "Epiphone USA Map guitar",
             "text": "Epiphone USA Map guitar for sale",
@@ -134,14 +133,31 @@ class MarketDiscoveryPathTests(unittest.TestCase):
             "availability": "available",
             "qualifying": True,
         }
+        if listings is None:
+            listings = [offer]
+        if page is None:
+            page = "<html><body>" + ("Buy it now. Add to cart. Epiphone USA Map guitar. " * 20) + "</body></html>"
         database = Database({
+            "sections": [
+                {"id": "market-1", "name": "Epiphone USA Map", "make": "Epiphone", "model": "USA Map"},
+                {"id": "alias-9", "name": "Epiphone USA Map guitar", "make": "Epiphone", "model": "USA Map guitar"},
+            ],
+            "matches": [{
+                "buyer_post_id": "buyer-1",
+                "seller_listing_id": "seller-1",
+                "section_id": "alias-9",
+            }],
             "buyer_posts": [{
+                "id": "buyer-1",
+                "section_id": None,
                 "username": "Existing buyer",
                 "post_text": "Looking for an Epiphone USA Map guitar",
                 "source_url": "https://sfb.example/request",
                 "source_platform": "sfb",
             }],
             "seller_listings": [{
+                "id": "seller-1",
+                "section_id": None,
                 "username": "Existing offer",
                 "listing_text": "Found for sale\nEpiphone USA Map guitar",
                 "source_url": "https://ebay.example/existing",
@@ -154,6 +170,8 @@ class MarketDiscoveryPathTests(unittest.TestCase):
 
         def search_wtb(query, _seen, max_results=15):
             searches.append(query)
+            if not searches_enabled:
+                return []
             if query.startswith('"Epiphone USA Map guitar"'):
                 return [{
                     "title": "Buyer from offer",
@@ -173,6 +191,7 @@ class MarketDiscoveryPathTests(unittest.TestCase):
             return "saved"
 
         def evaluate(*args, **_kwargs):
+            evaluations.append(args[:2])
             if ai:
                 return ai()
             if "Looking for an Epiphone USA Map guitar" in (args[0] or ""):
@@ -184,7 +203,8 @@ class MarketDiscoveryPathTests(unittest.TestCase):
             return "match-1", True
 
         worker["search_wtb_posts"] = search_wtb
-        worker["search_listings"] = lambda *_args, **_kwargs: {"listings": [offer], "incomplete": ""}
+        worker["search_listings"] = lambda *_args, **_kwargs: {"listings": listings, "incomplete": ""}
+        worker["read_listing_html"] = lambda url: page
         worker["_save_source"] = remember
         worker["mark_seen"] = lambda *_args, **_kwargs: None
         worker["usage_blocked"] = lambda _sb: blocked
@@ -199,10 +219,10 @@ class MarketDiscoveryPathTests(unittest.TestCase):
             },
         )
         summary = database.updates[-1][1]["result_summary"]
-        return saved, pairs, searches, summary
+        return saved, pairs, searches, summary, database, evaluations
 
     def test_existing_records_and_offer_buyer_search_are_used(self):
-        saved, pairs, searches, summary = self._run()
+        saved, pairs, searches, summary, _database, _evaluations = self._run()
         saved_urls = {url for url, _row in saved}
         self.assertIn("https://forum.example/wtb", saved_urls)
         self.assertIn("https://forum.example/from-offer", saved_urls)
@@ -223,12 +243,68 @@ class MarketDiscoveryPathTests(unittest.TestCase):
         def fail():
             raise worker["ReservationClosed"]("AI reservation timed out")
 
-        _saved, pairs, _searches, summary = self._run(ai=fail)
+        _saved, pairs, _searches, summary, _database, _evaluations = self._run(ai=fail)
         self.assertEqual(pairs, [])
         self.assertEqual(summary, "Search incomplete — AI reservation timed out")
 
     def test_cap_stop_records_incomplete_after_saving_discoveries(self):
-        saved, pairs, _searches, summary = self._run(blocked=True)
+        saved, pairs, _searches, summary, _database, _evaluations = self._run(blocked=True)
         self.assertTrue(saved)
         self.assertEqual(pairs, [])
         self.assertEqual(summary, "Search incomplete — daily OpenAI cap of 40 reached")
+
+    def test_legacy_record_without_section_id_follows_its_match(self):
+        worker = self.worker
+        sections = [
+            {"id": "market-1", "make": "Epiphone", "model": "USA Map"},
+            {"id": "alias-9", "make": "Epiphone", "model": "USA Map guitar"},
+            {"id": "other-2", "make": "Ford", "model": "Mustang"},
+        ]
+        buyers = [
+            {"id": "legacy", "section_id": None, "source_url": "https://forum.example/legacy", "username": "Legacy", "post_text": "WTB", "source_platform": "web"},
+            {"id": "mixed", "section_id": None, "source_url": "https://forum.example/mixed", "username": "Mixed", "post_text": "WTB", "source_platform": "web"},
+        ]
+        matches = [
+            {"buyer_post_id": "legacy", "section_id": "alias-9"},
+            {"buyer_post_id": "mixed", "section_id": "alias-9"},
+            {"buyer_post_id": "mixed", "section_id": "other-2"},
+        ]
+        database = Database({
+            "sections": sections,
+            "matches": matches,
+            "buyer_posts": buyers,
+            "seller_listings": [],
+        })
+        found_buyers, found_sellers = worker["load_market_records"](database, "market-1")
+        self.assertEqual([row["url"] for row in found_buyers], ["https://forum.example/legacy"])
+        self.assertEqual(found_sellers, [])
+        filled = [row for table, row in database.updates if table == "buyer_posts"]
+        self.assertEqual(filled, [{"section_id": "market-1"}])
+
+    def test_previously_available_listing_that_ended_is_not_a_new_match(self):
+        ended = "<html><body>" + ("This listing has ended. Epiphone USA Map guitar. " * 12) + "</body></html>"
+        _saved, pairs, _searches, summary, database, evaluations = self._run(
+            listings=[], searches_enabled=False, page=ended,
+        )
+        self.assertEqual(pairs, [])
+        self.assertEqual(evaluations, [])
+        self.assertEqual(summary, "No qualifying match found in the sources checked")
+        observed = [
+            row for table, row in database.updates
+            if table == "seller_listings" and "availability" in row
+        ]
+        self.assertEqual(observed[-1]["availability"], "ended")
+
+    def test_unreadable_stored_page_stays_unconfirmed(self):
+        worker = self.worker
+        stale = worker["stored_seller"]({
+            "id": "seller-1",
+            "availability": "available",
+            "source_url": "https://shop.example/item/old",
+            "username": "Old",
+            "listing_text": "Found for sale",
+        })
+        self.assertFalse(stale["qualifying"])
+        checked = worker["refresh_stored_offer"](stale, lambda url: "nope")
+        self.assertEqual(checked["availability"], "unconfirmed")
+        self.assertFalse(checked["qualifying"])
