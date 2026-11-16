@@ -35,12 +35,10 @@ SEARCH_DELAY = 3          # seconds between DuckDuckGo searches to avoid throttl
 SEEN_FILE = os.path.join(os.path.expanduser("~"), "sfb_seen_items.json")
 USAGE_FILE = os.path.join(os.path.expanduser("~"), "sfb_ai_usage.json")
 # Automatic category searches stay off unless SEEKER_AUTO_SEARCH=1.
-# Dashboard Run Seeker requests still run, until the daily OpenAI cap.
+# There is no daily OpenAI stop. Reservations are still counted.
 AUTO_SEARCH = os.environ.get("SEEKER_AUTO_SEARCH", "0").strip().lower() in ("1", "true", "yes", "on")
-try:
-    DAILY_AI_CAP = int(os.environ.get("SEEKER_DAILY_AI_CAP", "40"))
-except ValueError:
-    DAILY_AI_CAP = 40
+# The deployed reservation function still receives a cap. This value does not stop a search.
+RESERVE_CAP = 2147483647
 
 
 def ai_calls_today():
@@ -65,7 +63,7 @@ def record_ai_call():
 
 
 def ai_cap_reached():
-    return ai_calls_today() >= DAILY_AI_CAP
+    return False
 
 
 class ReservationClosed(Exception):
@@ -97,8 +95,6 @@ def rpc_failure(exc):
 
 
 def reserve_closed_reason(kind, detail=""):
-    if kind == "cap":
-        return f"daily OpenAI cap of {DAILY_AI_CAP} reached"
     if kind == "timeout":
         return "AI reservation timed out"
     if kind == "permission":
@@ -125,35 +121,8 @@ def claim_closed_reason(kind, detail=""):
 
 
 def usage_blocked(sb):
-    """The database cap counts once the usage table exists. A read error stays closed."""
-    if sb is None:
-        return ai_cap_reached()
-    today = datetime.now(timezone.utc).date().isoformat()
-    try:
-        rows = (
-            sb.table("seeker_ai_usage")
-            .select("baseline,succeeded")
-            .eq("usage_date", today)
-            .limit(1)
-            .execute()
-            .data
-        )
-        open_rows = (
-            sb.table("seeker_ai_reservations")
-            .select("id")
-            .eq("usage_date", today)
-            .eq("state", "reserved")
-            .execute()
-            .data
-        )
-    except Exception as exc:
-        if rpc_failure(exc) == "missing":
-            return ai_cap_reached()
-        raise ReservationClosed(reserve_closed_reason(rpc_failure(exc), exc))
-    if not rows:
-        return False
-    row = rows[0]
-    return (row.get("baseline") or 0) + (row.get("succeeded") or 0) + len(open_rows or []) >= DAILY_AI_CAP
+    """The daily total is recorded. It does not stop a search."""
+    return False
 
 
 WORKER_ID = f"{os.environ.get('COMPUTERNAME', 'pc')}-{os.getpid()}"
@@ -202,26 +171,23 @@ def source_identity(url):
 def _reserve_ai(sb, allow_file_counter):
     """A timeout or permission error does not use the JSON file or call the model."""
     if sb is None:
-        if allow_file_counter and not ai_cap_reached():
+        if allow_file_counter:
             return ("file", None)
-        kind = "cap" if ai_cap_reached() else "missing"
-        raise ReservationClosed(reserve_closed_reason(kind))
+        raise ReservationClosed(reserve_closed_reason("missing"))
     try:
         result = sb.rpc(
             "reserve_seeker_ai",
-            {"cap": DAILY_AI_CAP, "baseline": ai_calls_today()},
+            {"cap": RESERVE_CAP, "baseline": ai_calls_today()},
         ).execute()
     except Exception as exc:
         kind = rpc_failure(exc)
-        if kind == "missing" and allow_file_counter and not ai_cap_reached():
-            return ("file", None)
         if kind == "missing" and allow_file_counter:
-            raise ReservationClosed(reserve_closed_reason("cap"))
+            return ("file", None)
         raise ReservationClosed(reserve_closed_reason(kind, exc))
     token = reservation_id_from(result.data)
     if token:
         return ("db", token)
-    raise ReservationClosed(reserve_closed_reason("cap"))
+    raise ReservationClosed(reserve_closed_reason("missing"))
 
 
 def _settle_ai(sb, reservation_id, outcome):
@@ -1411,10 +1377,10 @@ Respond in this exact JSON format:
         )
         if reservation_kind == "db":
             _settle_ai(sb, reservation_id, "succeeded")
-            print(f"    OpenAI call reserved and settled. Cap {DAILY_AI_CAP}.")
+            print("    OpenAI call reserved and settled.")
         else:
             used = record_ai_call()
-            print(f"    OpenAI calls today: {used}/{DAILY_AI_CAP}")
+            print(f"    OpenAI calls today: {used}")
         text = response.choices[0].message.content.strip()
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
@@ -1778,9 +1744,6 @@ def auto_search(sb, openai_client, seen, search_index, shuffled_plan):
             if not seller.get("qualifying"):
                 print("    Not a qualifying offer. Continuing.")
                 continue
-            if usage_blocked(sb):
-                print(f"    Daily OpenAI cap reached ({DAILY_AI_CAP}). Stopping this buyer.")
-                break
             result = ai_evaluate_match(buyer["text"], seller["text"], openai_client, sb)
             if not result:
                 continue
@@ -2580,30 +2543,27 @@ def run_market_discovery(sb, openai_client, seen, run):
     )
     verified = 0
     try:
-        if compared and usage_blocked(sb):
-            incomplete = reserve_closed_reason("cap")
-        else:
-            for buyer, seller in compared:
-                if verified >= MATCH_TARGET:
-                    break
-                seller = verify_stored_offer(seller, read_listing_html)
-                if seller.get("stored") and not seller.get("observation_saved"):
-                    record_offer_observation(sb, seller)
-                    seller["observation_saved"] = True
-                if not qualifies(seller, buyer.get("text") or ""):
-                    print(f"    Rejected candidate, still searching: {(seller.get('title') or '')[:70]}")
-                    continue
-                result = ai_evaluate_match(
-                    buyer.get("text") or "", seller.get("text") or "", openai_client, sb, False,
-                )
-                if not (result and result.get("match") and result.get("confidence", 0) >= 60):
-                    continue
-                if not qualifies(seller, buyer.get("text") or ""):
-                    continue
-                _match_id, created = push_match(sb, buyer, seller, result, section_id=market_id)
-                if created:
-                    verified += 1
-                    mark_seen(seen, seller["url"], seller.get("title", ""))
+        for buyer, seller in compared:
+            if verified >= MATCH_TARGET:
+                break
+            seller = verify_stored_offer(seller, read_listing_html)
+            if seller.get("stored") and not seller.get("observation_saved"):
+                record_offer_observation(sb, seller)
+                seller["observation_saved"] = True
+            if not qualifies(seller, buyer.get("text") or ""):
+                print(f"    Rejected candidate, still searching: {(seller.get('title') or '')[:70]}")
+                continue
+            result = ai_evaluate_match(
+                buyer.get("text") or "", seller.get("text") or "", openai_client, sb, False,
+            )
+            if not (result and result.get("match") and result.get("confidence", 0) >= 60):
+                continue
+            if not qualifies(seller, buyer.get("text") or ""):
+                continue
+            _match_id, created = push_match(sb, buyer, seller, result, section_id=market_id)
+            if created:
+                verified += 1
+                mark_seen(seen, seller["url"], seller.get("title", ""))
     except ReservationClosed as exc:
         incomplete = exc.reason
     summary = search_outcome([{"qualifying": True}] * verified, incomplete)
@@ -2648,15 +2608,6 @@ def check_manual_requests(sb, openai_client, seen):
         matches_found = 0
         verified_found = 0
 
-        if usage_blocked(sb):
-            print(f"    Daily OpenAI cap reached ({DAILY_AI_CAP}). Not searching.")
-            sb.table("seeker_runs").update({
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "result_summary": f"Search incomplete — daily OpenAI cap of {DAILY_AI_CAP} reached",
-            }).eq("id", run_id).execute()
-            return True
-
         if query:
             print(f"    Search: {query}")
 
@@ -2677,15 +2628,6 @@ def check_manual_requests(sb, openai_client, seen):
                 for seller in listings:
                     if verified_found >= MATCH_TARGET:
                         break
-                    try:
-                        if usage_blocked(sb):
-                            incomplete = reserve_closed_reason("cap")
-                            print(f"    {incomplete}")
-                            break
-                    except ReservationClosed as exc:
-                        incomplete = exc.reason
-                        print(f"    {exc.reason}")
-                        break
                     if not seller.get("qualifying"):
                         print(
                             f"    Rejected candidate, still searching: {seller['title'][:70]} "
@@ -2697,9 +2639,6 @@ def check_manual_requests(sb, openai_client, seen):
                     except ReservationClosed as exc:
                         incomplete = exc.reason
                         print(f"    {exc.reason}")
-                        break
-                    if usage_blocked(sb) and not result_ai:
-                        incomplete = f"daily OpenAI cap of {DAILY_AI_CAP} reached"
                         break
                     if not (result_ai and result_ai.get("match") and result_ai.get("confidence", 0) >= 60):
                         print(f"    Not a qualifying product: {seller['title'][:70]}")
@@ -2784,14 +2723,13 @@ def main():
     print(f"Seeker v2.1 is running. ({len(shuffled_plan)} searches queued)")
     print(f"  - Auto mode: {auto_label}")
     print("  - Manual mode: listening for website Run Seeker requests")
-    print(f"  - OpenAI today: {ai_calls_today()}/{DAILY_AI_CAP}")
+    print(f"  - OpenAI calls recorded today: {ai_calls_today()}")
     print(f"  - Cooldown: items re-checked after {COOLDOWN_HOURS} hours")
     print(f"  - Search delay: {SEARCH_DELAY}s between searches")
     print("-" * 60)
 
     search_index = 0
     auto_counter = 0
-    cap_announced = False
 
     while True:
         try:
@@ -2802,12 +2740,7 @@ def main():
             # Every 4th poll cycle, do an auto search when that switch is on
             auto_counter += 1
             if AUTO_SEARCH and not had_manual and auto_counter >= 4:
-                if usage_blocked(sb):
-                    if not cap_announced:
-                        print(f"    Daily OpenAI cap reached ({DAILY_AI_CAP}). Auto search paused.")
-                        cap_announced = True
-                else:
-                    search_index = auto_search(sb, openai_client, seen, search_index, shuffled_plan)
+                search_index = auto_search(sb, openai_client, seen, search_index, shuffled_plan)
                 auto_counter = 0
 
         except KeyboardInterrupt:
@@ -3195,7 +3128,8 @@ def check_rules():
     assert rpc_failure(Exception("Could not find the function public.claim_next_seeker_run")) == "missing"
     assert reserve_closed_reason("timeout") == "AI reservation timed out"
     assert claim_closed_reason("permission") == "job claim was denied"
-    assert search_outcome([], reserve_closed_reason("cap")).startswith("Search incomplete — daily OpenAI cap")
+    assert usage_blocked(None) is False
+    assert "daily OpenAI cap" not in reserve_closed_reason("missing")
     assert search_outcome([{"qualifying": True}], "AI reservation timed out").startswith("Found 1 qualifying match(es). Search incomplete")
     scope = market_scope_text("Epiphone USA Map", "market-1")
     assert offer_buyer_query({"title": "scope", "text": scope}) == ""

@@ -20,6 +20,7 @@ class Gate:
 
     def rpc(self, name, args):
         self.calls.append(name)
+        self.args = args
         return self
 
     def execute(self):
@@ -91,16 +92,15 @@ class ReservationRulesTests(unittest.TestCase):
             worker["claim_next_run"](Gate(error=Exception("42501 permission denied")))
         self.assertEqual(caught.exception.reason, "job claim was denied")
 
-    def test_cap_stop_is_an_incomplete_reason(self):
+    def test_daily_total_does_not_stop_a_reservation(self):
         worker = self.worker
-        with self.assertRaises(worker["ReservationClosed"]) as caught:
-            worker["_reserve_ai"](Gate(data=None), True)
-        summary = worker["search_outcome"]([{"qualifying": True}], caught.exception.reason)
-        self.assertEqual(
-            summary,
-            "Found 1 qualifying match(es). Search incomplete — daily OpenAI cap of 40 reached",
-        )
-        self.assertNotIn("No qualifying match", summary)
+        self.assertFalse(worker["usage_blocked"](None))
+        gate = Gate(data="550e8400-e29b-41d4-a716-446655440000")
+        kind, token = worker["_reserve_ai"](gate, True)
+        self.assertEqual((kind, token), ("db", "550e8400-e29b-41d4-a716-446655440000"))
+        self.assertEqual(gate.args["cap"], worker["RESERVE_CAP"])
+        self.assertGreater(gate.args["cap"], 40)
+        self.assertNotIn("daily OpenAI cap", worker["reserve_closed_reason"]("missing"))
 
     def test_a_missing_function_is_the_only_fallback(self):
         worker = self.worker
@@ -247,11 +247,15 @@ class MarketDiscoveryPathTests(unittest.TestCase):
         self.assertEqual(pairs, [])
         self.assertEqual(summary, "Search incomplete — AI reservation timed out")
 
-    def test_cap_stop_records_incomplete_after_saving_discoveries(self):
+    def test_daily_total_does_not_stop_discovery(self):
         saved, pairs, _searches, summary, _database, _evaluations = self._run(blocked=True)
         self.assertTrue(saved)
-        self.assertEqual(pairs, [])
-        self.assertEqual(summary, "Search incomplete — daily OpenAI cap of 40 reached")
+        self.assertIn(
+            ("https://sfb.example/request", "https://reverb.com/item/97393148-epiphone", "market-1"),
+            pairs,
+        )
+        self.assertNotIn("daily OpenAI cap", summary)
+        self.assertIn("qualifying match", summary)
 
     def test_legacy_record_without_section_id_follows_its_match(self):
         worker = self.worker
