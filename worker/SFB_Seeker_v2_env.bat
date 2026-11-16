@@ -556,7 +556,7 @@ def mark_seen(seen, url, title=""):
     save_seen(seen)
 
 # --- Search functions ---
-def ddg_text(query, max_results=10):
+def ddg_text(query, max_results=10, diagnostics=None):
     """One DuckDuckGo query, retried once when the first response is empty."""
     for attempt in range(2):
         try:
@@ -568,16 +568,19 @@ def ddg_text(query, max_results=10):
         except Exception as e:
             print(f"    Search error: {e}")
             if attempt == 1:
+                if diagnostics is not None:
+                    diagnostics.append({"query": query, "error": str(e)})
                 return []
         time.sleep(SEARCH_DELAY)
     return []
 
 
-def search_wtb_posts(query, seen, max_results=15):
+def search_wtb_posts(query, seen, max_results=15, diagnostics=None):
     """Search for WTB forum posts using DuckDuckGo."""
     posts = []
     try:
-        results = ddg_text(query, max_results=max_results)
+        results = (ddg_text(query, max_results=max_results) if diagnostics is None else
+                   ddg_text(query, max_results=max_results, diagnostics=diagnostics))
         for r in results:
             url = r.get("href", "")
             title = r.get("title", "")
@@ -1634,7 +1637,7 @@ def listing_seeds(rows, limit, skipped=None):
     return seeds
 
 
-def search_listings(query, seen, max_keep=8, buyer_text=""):
+def search_listings(query, seen, max_keep=8, buyer_text="", diagnostics=None):
     """Search every configured source. A rejected page does not end the search."""
     request = buyer_text or query
     item_query = requested_item(request)
@@ -1643,7 +1646,9 @@ def search_listings(query, seen, max_keep=8, buyer_text=""):
     for template in LISTING_QUERIES:
         search_text = template.format(query=item_query)
         print(f"    Listing search: {search_text[:110]}")
-        groups.append(listing_seeds(ddg_text(search_text, max_results=10), PAGE_BUDGET, skipped))
+        rows = (ddg_text(search_text, max_results=10) if diagnostics is None else
+                ddg_text(search_text, max_results=10, diagnostics=diagnostics))
+        groups.append(listing_seeds(rows, PAGE_BUDGET, skipped))
         time.sleep(SEARCH_DELAY)
     seeds = []
     seen_urls = set()
@@ -2979,6 +2984,149 @@ def _remember_buyer(sb, market_id, post):
     })
 
 
+# Manual public discovery is separate from consumer requests and scheduled monitoring.
+PUBLIC_CYCLE_MARKETS = 3
+
+
+def public_cycle_markets(sections, history):
+    """Rotate confirmed market aliases by their last persisted discovery attempt."""
+    groups = {}
+    for row in sorted(sections, key=lambda r: str(r.get("id") or "")):
+        key = section_market_key(sections, row.get("id"))
+        name = " ".join(p for p in (row.get("make"), row.get("model")) if p and p.casefold() not in _BLANK_MARKET)
+        name = name or str(row.get("name") or "").strip()
+        if not key or not name or not row.get("id"):
+            continue
+        groups.setdefault(key, {"id": row["id"], "name": name, "last": ""})
+    for row in history:
+        key = section_market_key(sections, row.get("market_id"))
+        if key in groups:
+            groups[key]["last"] = max(groups[key]["last"], str(row.get("checked_at") or ""))
+    return sorted(groups.values(), key=lambda m: (m["last"], m["name"].casefold(), m["id"]))
+
+
+def _public_cycle_buyer(row):
+    url = (row.get("url") or "").lower()
+    return (row.get("platform") != "sfb" and url.startswith(("https://", "http://"))
+            and "searchfindbuy.local/requests/" not in url)
+
+
+def discover_public_market(sb, client, seen, market, report=None):
+    """Both directions use the existing reader, matcher and qualification rules."""
+    market_id, name = market["id"], market["name"]
+    report = report if report is not None else {"market": name, "new_matches": 0, "still_valid": 0,
+              "buyers": 0, "offers": 0, "rejected": 0, "incomplete": [], "queries": []}
+    old_buyers, old_sellers = load_market_records(sb, market_id)
+    buyers = [b for b in old_buyers if _public_cycle_buyer(b)]
+    offers = []
+    errors = []
+
+    def find_buyers(item):
+        query = wtb_search_query(item)
+        if query in report["queries"]:
+            return
+        report["queries"].append(query)
+        posts = search_wtb_posts(query, seen, diagnostics=errors)
+        for post in posts:
+            before = len(buyers) + len(offers)
+            _take_public_post(sb, market_id, post, buyers, offers, seen, name)
+            if len(buyers) + len(offers) == before:
+                report["rejected"] += 1
+
+    find_buyers(name)
+    # This executes even if there is no WTB hit.
+    found = search_listings(name, seen, max_keep=8, buyer_text=name, diagnostics=errors)
+    report["skipped"] = found.get("skipped", [])
+    offers.extend(found["listings"])
+    if found.get("incomplete"):
+        report["incomplete"].append(found["incomplete"])
+    for offer in unique_offers(offers):
+        label = availability_label(offer.get("availability"), offer.get("availability_evidence") or "", offer.get("checked_at") or "")
+        _save_source(sb, "seller_listings", offer["url"], {
+            "username": (offer.get("title") or "unknown")[:80],
+            "listing_text": (label + "\n" + (offer.get("text") or ""))[:5000],
+            "source_url": offer["url"], "source_platform": offer.get("platform") or "web",
+            "section_id": market_id,
+        })
+        record_offer_observation(sb, offer)
+    sellers = unique_offers(offers + old_sellers)
+    current = [verify_stored_offer(s, read_listing_html) for s in sellers]
+    queries, overflow = buyer_queries_for_offers(current, MATCH_TARGET)
+    if overflow:
+        report["incomplete"].append("buyer-search limit reached before every offer was checked")
+    for query in queries:
+        find_buyers(query)
+    buyers = [b for b in unique_by_url(buyers) if _public_cycle_buyer(b)]
+    report["buyers"], report["offers"] = len(buyers), len(current)
+    report["incomplete"].extend("Search failed (" + e["query"] + "): " + e["error"] for e in errors)
+    pairs = market_comparisons(buyers, current, name)
+    for buyer, seller in pairs:
+        if report["new_matches"] >= MATCH_TARGET:
+            report["incomplete"].append("match limit reached before every pair was checked")
+            break
+        if not qualifies(seller, buyer.get("text") or ""):
+            report["rejected"] += 1
+            continue
+        try:
+            result = ai_evaluate_match(buyer.get("text") or "", seller.get("text") or "", client, sb, False)
+        except ReservationClosed as exc:
+            report["incomplete"].append(exc.reason)
+            break
+        if not (result and result.get("match") and result.get("confidence", 0) >= 60):
+            report["rejected"] += 1
+            continue
+        if not qualifies(seller, buyer.get("text") or ""):
+            report["rejected"] += 1
+            continue
+        match_id, created = push_match(sb, buyer, seller, result, section_id=market_id)
+        if match_id:
+            report["new_matches" if created else "still_valid"] += 1
+    return report
+
+
+def run_public_discovery_cycle(sb, client, seen, run):
+    """A bounded manual cycle; progress survives restarts in check history."""
+    reports = []
+    try:
+        sections = sb.table("sections").select("id,name,make,model").execute().data or []
+        history = (sb.table("seeker_check_history").select("market_id,checked_at")
+                   .eq("source_kind", "public_discovery_cycle").order("checked_at", desc=True)
+                   .limit(1000).execute().data or [])
+        markets = public_cycle_markets(sections, history)
+        for market in markets[:PUBLIC_CYCLE_MARKETS]:
+            report = {"market": market["name"], "new_matches": 0, "still_valid": 0,
+                      "buyers": 0, "offers": 0, "rejected": 0, "incomplete": [], "queries": []}
+            try:
+                discover_public_market(sb, client, seen, market, report)
+            except Exception as exc:
+                report["incomplete"].append(str(exc))
+            reports.append(report)
+            # Unlike optional history writes, cursor persistence must succeed.
+            sb.table("seeker_check_history").insert({
+                "run_id": run["id"], "market_id": market["id"],
+                "source_url": "sfb://markets/" + market["id"],
+                "source_kind": "public_discovery_cycle",
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+                "outcome": "incomplete" if report["incomplete"] else "checked",
+                "evidence": json.dumps(report), "changes": "",
+            }).execute()
+        new = sum(r["new_matches"] for r in reports)
+        existing = sum(r["still_valid"] for r in reports)
+        summary = f"Public discovery: {new} new match(es), {existing} existing pair(s) still valid. Checked {len(reports)} of {len(markets)} markets."
+        for report in reports:
+            summary += f" {report['market']}: {report['buyers']} public buyers, {report['offers']} offers, {report['new_matches']} new matches, {report['still_valid']} existing, {report['rejected']} rejected."
+            if report["incomplete"]:
+                summary += " Search incomplete: " + "; ".join(report["incomplete"]) + "."
+        if len(markets) > len(reports):
+            summary += " Cycle incomplete — market budget reached; next run continues with least recently checked markets."
+        if not markets:
+            summary += " No markets configured."
+        sb.table("seeker_runs").update({"new_matches": new, "still_valid": existing}).eq("id", run["id"]).execute()
+        _finish_run(sb, run["id"], summary)
+    except Exception as exc:
+        _finish_run(sb, run["id"], "Public discovery incomplete — " + str(exc))
+
+
 def run_market_discovery(sb, openai_client, seen, run):
     """Find public buyers and sellers for one market. The market name is not a buyer."""
     run_id = run["id"]
@@ -3322,12 +3470,8 @@ def check_manual_requests(sb, openai_client, seen):
                 incomplete,
             )
         else:
-            print(f"    No search query — running next auto search instead.")
-            shuffled = list(SEARCH_PLAN)
-            random.shuffle(shuffled)
-            auto_search(sb, openai_client, seen, 0, shuffled)
-            matches_found = 1
-            summary = f"Found {matches_found} match(es)" if matches_found > 0 else "Search complete — no new matches this run"
+            run_public_discovery_cycle(sb, openai_client, seen, run)
+            return True
         sb.table("seeker_runs").update({
             "status": "completed",
             "completed_at": datetime.now(timezone.utc).isoformat(),
