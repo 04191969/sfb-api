@@ -13,8 +13,12 @@ from sfb_api.api.seeker_markets import (
     WORKER_UNKNOWN,
     assemble_markets,
     category_for,
+    classify_heartbeat,
     display_name,
+    is_market_discovery,
     market_detail,
+    market_scope,
+    present_run,
 )
 
 
@@ -77,3 +81,35 @@ class MarketAssemblyTests(unittest.TestCase):
         self.assertEqual(detail["market"]["id"], usa["id"])
         self.assertEqual(detail["buyer_requests"][0]["origin"], "sfb_user")
         self.assertEqual(detail["seller_offers"][0]["availability"], "available")
+        self.assertFalse(result["discovery_controls"]["available"])
+
+
+class DiscoveryControlTests(unittest.TestCase):
+    def test_a_market_name_is_not_a_buyer_request(self):
+        scope = market_scope("Epiphone USA Map", "market-1")
+        self.assertTrue(is_market_discovery({"search_query": scope}))
+        self.assertNotIn("Find sellers", scope)
+        self.assertIn("not a buyer request", scope)
+
+    def test_heartbeat_needs_a_fresh_row(self):
+        self.assertEqual(classify_heartbeat([], NOW)["message"], WORKER_UNKNOWN)
+        stale = classify_heartbeat([{"seen_at": "2026-11-16T14:00:00+00:00"}], NOW)
+        self.assertEqual(stale["status"], "offline")
+        fresh = classify_heartbeat([{"seen_at": "2026-11-16T14:59:40+00:00"}], NOW)
+        self.assertEqual(fresh["status"], "online")
+
+    def test_control_stays_unavailable_until_the_worker_is_online(self):
+        offline = assemble_markets([], [], [], [], [], NOW, worker={"status": "offline", "message": "Worker offline"}, discovery_ready=True)
+        self.assertFalse(offline["discovery_controls"]["available"])
+        online = assemble_markets([], [], [], [], [], NOW, worker={"status": "online", "message": "Worker online"}, discovery_ready=True)
+        self.assertTrue(online["discovery_controls"]["available"])
+
+    def test_run_labels_do_not_invent_a_result(self):
+        pending = present_run({"status": "pending"})
+        self.assertEqual(pending["label"], "Queued — waiting for worker")
+        self.assertFalse(pending["animate"])
+        running = present_run({"status": "running"})
+        self.assertEqual(running["label"], "Searching")
+        self.assertTrue(running["animate"])
+        done = present_run({"status": "completed", "result_summary": "Search incomplete — the page budget was used before every candidate was opened"})
+        self.assertIn("Search incomplete", done["label"])

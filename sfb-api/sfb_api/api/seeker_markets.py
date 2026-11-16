@@ -109,7 +109,7 @@ def _buyer_origin(buyer):
     return NOT_AVAILABLE
 
 
-def assemble_markets(sections, matches, buyers, sellers, runs, now=None):
+def assemble_markets(sections, matches, buyers, sellers, runs, now=None, worker=None, discovery_ready=False):
     """One card per confirmed market. Ambiguous names stay in review."""
     now = now or datetime.now(timezone.utc)
     week_start = now - timedelta(days=7)
@@ -178,7 +178,8 @@ def assemble_markets(sections, matches, buyers, sellers, runs, now=None):
         seller = sellers_by_id.get(match.get("seller_listing_id")) or {}
         seller_id = seller.get("id")
         cross = _is_cross_post(match.get("ai_reasoning"))
-        state = _offer_state(seller.get("listing_text"))
+        stored = str(seller.get("availability") or "").casefold()
+        state = stored if stored in ("available", "ended", "unconfirmed") else _offer_state(seller.get("listing_text"))
         if seller_id and not cross:
             offers_seen[market["id"]].add(seller_id)
             if state == "available":
@@ -230,16 +231,23 @@ def assemble_markets(sections, matches, buyers, sellers, runs, now=None):
             "last_result_summary": summary,
             "watching": NOT_AVAILABLE,
         })
+    reported_worker = worker or {"status": "unknown", "message": WORKER_UNKNOWN}
+    connected = bool(discovery_ready and reported_worker.get("status") == "online")
     return {
-        "worker": {"status": "unknown", "message": WORKER_UNKNOWN},
-        "discovery_controls": {"available": False, "message": DISCOVERY_UNAVAILABLE},
+        "worker": reported_worker,
+        "discovery_controls": {
+            "available": connected,
+            "message": "" if connected else DISCOVERY_UNAVAILABLE,
+        },
         "markets": cards,
         "review": review,
     }
 
 
-def market_detail(market_id, sections, matches, buyers, sellers, runs, now=None):
-    assembled = assemble_markets(sections, matches, buyers, sellers, runs, now)
+def market_detail(market_id, sections, matches, buyers, sellers, runs, now=None, worker=None, discovery_ready=False):
+    assembled = assemble_markets(
+        sections, matches, buyers, sellers, runs, now, worker, discovery_ready,
+    )
     chosen = None
     for market in assembled["markets"]:
         if market_id in {market["id"], market["slug"], *market["alias_ids"]}:
@@ -273,7 +281,8 @@ def market_detail(market_id, sections, matches, buyers, sellers, runs, now=None)
             })
         if seller.get("id") and seller["id"] not in seen_sellers:
             seen_sellers.add(seller["id"])
-            state = _offer_state(seller.get("listing_text"))
+            stored = str(seller.get("availability") or "").casefold()
+            state = stored if stored in ("available", "ended", "unconfirmed") else _offer_state(seller.get("listing_text"))
             offer_rows.append({
                 "id": seller.get("id"),
                 "availability": state if state != "unknown" else NOT_AVAILABLE,
@@ -305,3 +314,57 @@ def market_detail(market_id, sections, matches, buyers, sellers, runs, now=None)
         "seller_offers": offer_rows,
         "matches": match_rows,
     }
+
+
+HEARTBEAT_FRESH = timedelta(seconds=45)
+
+
+def classify_heartbeat(rows, now=None):
+    """Online only from a fresh heartbeat. No row is unknown, not offline."""
+    now = now or datetime.now(timezone.utc)
+    newest = None
+    for row in rows or []:
+        seen = _parse_time(row.get("seen_at"))
+        if seen and (newest is None or seen > newest):
+            newest = seen
+    if newest is None:
+        return {"status": "unknown", "message": WORKER_UNKNOWN, "seen_at": None}
+    age = now - newest
+    if age <= HEARTBEAT_FRESH:
+        return {"status": "online", "message": "Worker online", "seen_at": newest.isoformat()}
+    return {"status": "offline", "message": "Worker offline", "seen_at": newest.isoformat()}
+
+
+def market_scope(name, market_id):
+    """Search scope for a market. This text is not a buyer request."""
+    return (
+        "Market discovery\n"
+        f"Market: {name}\n"
+        f"Market id: {market_id}\n"
+        "This market name is search scope, not a buyer request."
+    )
+
+
+def is_market_discovery(run):
+    if str((run or {}).get("job_kind") or "") == "market_discovery":
+        return True
+    return str((run or {}).get("search_query") or "").startswith("Market discovery\n")
+
+
+def present_run(run):
+    """Status the page can show without inventing a result."""
+    row = dict(run or {})
+    phase = row.get("status") or "pending"
+    summary = row.get("result_summary") or ""
+    if phase == "pending":
+        label, animate = "Queued — waiting for worker", False
+    elif phase == "running":
+        label, animate = "Searching", True
+    elif summary:
+        label, animate = summary, False
+    else:
+        label, animate = NOT_AVAILABLE, False
+    row["phase"] = phase
+    row["label"] = label
+    row["animate"] = animate
+    return row
