@@ -68,12 +68,66 @@ def ai_cap_reached():
     return ai_calls_today() >= DAILY_AI_CAP
 
 
+class ReservationClosed(Exception):
+    """The model was not called. The run keeps this reason."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+class ClaimClosed(Exception):
+    """The claim did not succeed. Do not take the same job by another path."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def rpc_failure(exc):
+    """Timeout and permission stay closed. A missing function is the pre-cutover case."""
+    text = " ".join(str(exc or "").split()).lower()
+    if any(token in text for token in ("timeout", "timed out", "statement timeout", "57014", "canceling statement")):
+        return "timeout"
+    if any(token in text for token in ("permission", "42501", "not authorized", "unauthorized", "jwt", "pgrst301")):
+        return "permission"
+    if any(token in text for token in ("pgrst202", "could not find the function", "schema cache", "does not exist")):
+        return "missing"
+    return "other"
+
+
+def reserve_closed_reason(kind, detail=""):
+    if kind == "cap":
+        return f"daily OpenAI cap of {DAILY_AI_CAP} reached"
+    if kind == "timeout":
+        return "AI reservation timed out"
+    if kind == "permission":
+        return "AI reservation was denied"
+    if kind == "missing":
+        return "AI reservation is not available"
+    text = " ".join(str(detail or "").split())
+    if text:
+        return f"AI reservation failed — {text[:180]}"
+    return "AI reservation failed"
+
+
+def claim_closed_reason(kind, detail=""):
+    if kind == "timeout":
+        return "job claim timed out"
+    if kind == "permission":
+        return "job claim was denied"
+    if kind == "missing":
+        return "job claim is not available"
+    text = " ".join(str(detail or "").split())
+    if text:
+        return f"job claim failed — {text[:180]}"
+    return "job claim failed"
+
+
 def usage_blocked(sb):
-    """Open reservations count against the cap. The JSON file remains the fallback."""
-    if ai_cap_reached():
-        return True
+    """The database cap counts once the usage table exists. A read error stays closed."""
     if sb is None:
-        return False
+        return ai_cap_reached()
     today = datetime.now(timezone.utc).date().isoformat()
     try:
         rows = (
@@ -92,8 +146,10 @@ def usage_blocked(sb):
             .execute()
             .data
         )
-    except Exception:
-        return False
+    except Exception as exc:
+        if rpc_failure(exc) == "missing":
+            return ai_cap_reached()
+        raise ReservationClosed(reserve_closed_reason(rpc_failure(exc), exc))
     if not rows:
         return False
     row = rows[0]
@@ -144,23 +200,28 @@ def source_identity(url):
 
 
 def _reserve_ai(sb, allow_file_counter):
-    """Database reservation is the authority. A refused reservation does not use the file."""
-    if sb is not None:
-        try:
-            result = sb.rpc(
-                "reserve_seeker_ai",
-                {"cap": DAILY_AI_CAP, "baseline": ai_calls_today()},
-            ).execute()
-        except Exception:
-            result = None
-        else:
-            token = reservation_id_from(result.data)
-            if token:
-                return ("db", token)
-            return None
-    if allow_file_counter and not ai_cap_reached():
-        return ("file", None)
-    return None
+    """A timeout or permission error does not use the JSON file or call the model."""
+    if sb is None:
+        if allow_file_counter and not ai_cap_reached():
+            return ("file", None)
+        kind = "cap" if ai_cap_reached() else "missing"
+        raise ReservationClosed(reserve_closed_reason(kind))
+    try:
+        result = sb.rpc(
+            "reserve_seeker_ai",
+            {"cap": DAILY_AI_CAP, "baseline": ai_calls_today()},
+        ).execute()
+    except Exception as exc:
+        kind = rpc_failure(exc)
+        if kind == "missing" and allow_file_counter and not ai_cap_reached():
+            return ("file", None)
+        if kind == "missing" and allow_file_counter:
+            raise ReservationClosed(reserve_closed_reason("cap"))
+        raise ReservationClosed(reserve_closed_reason(kind, exc))
+    token = reservation_id_from(result.data)
+    if token:
+        return ("db", token)
+    raise ReservationClosed(reserve_closed_reason("cap"))
 
 
 def _settle_ai(sb, reservation_id, outcome):
@@ -194,8 +255,11 @@ def write_heartbeat(sb):
 def claim_next_run(sb):
     try:
         result = sb.rpc("claim_next_seeker_run", {"worker": WORKER_ID}).execute()
-    except Exception:
-        return "fallback"
+    except Exception as exc:
+        kind = rpc_failure(exc)
+        if kind == "missing":
+            return "fallback"
+        raise ClaimClosed(claim_closed_reason(kind, exc))
     data = result.data
     if isinstance(data, str):
         try:
@@ -1251,11 +1315,7 @@ def extract_shipping(text):
 # --- AI Matching ---
 def ai_evaluate_match(buyer_text, seller_text, client, sb=None, allow_file_counter=True):
     """Use OpenAI to evaluate if a buyer post matches a seller listing."""
-    reservation = _reserve_ai(sb, allow_file_counter)
-    if not reservation:
-        print(f"    Daily OpenAI cap reached ({DAILY_AI_CAP}). Skipping this call.")
-        return None
-    reservation_kind, reservation_id = reservation
+    reservation_kind, reservation_id = _reserve_ai(sb, allow_file_counter)
     prompt = f"""You are a matching engine for a marketplace. Your job is to determine if a seller's listing could fulfill what a buyer is looking for.
 
 BUYER'S WANT-TO-BUY POST:
@@ -1591,7 +1651,7 @@ def push_match(sb, buyer, seller, match_result, section_id=None):
         # Check for duplicate match
         existing = sb.table("matches").select("id").eq("buyer_post_id", buyer_id).eq("seller_listing_id", seller_id).execute()
         if existing.data:
-            return existing.data[0]["id"]
+            return existing.data[0]["id"], False
 
         # Insert match. decision was set with the separated labels above.
         resp = sb.table("matches").insert({
@@ -1602,11 +1662,11 @@ def push_match(sb, buyer, seller, match_result, section_id=None):
             "make": make, "model": model, "part": part,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
-        return resp.data[0]["id"]
+        return resp.data[0]["id"], True
 
     except Exception as e:
         print(f"    Supabase error: {e}")
-        return None
+        return None, False
 
 
 # --- Auto mode: autonomous searching ---
@@ -1667,7 +1727,7 @@ def auto_search(sb, openai_client, seen, search_index, shuffled_plan):
             print(f"    AI says: match={is_match}, confidence={confidence}%")
 
             if is_match and confidence >= 60 and qualifies(seller, buyer["text"]):
-                match_id = push_match(sb, buyer, seller, result)
+                match_id, _created = push_match(sb, buyer, seller, result)
                 if match_id:
                     matches_found += 1
                     qualified = True
@@ -1702,6 +1762,123 @@ def _save_source(sb, table, url, row):
     return sb.table(table).insert(row).execute().data[0]["id"]
 
 
+def unique_by_url(rows):
+    kept = []
+    seen_urls = set()
+    for row in rows or []:
+        url = row.get("url") or ""
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        kept.append(row)
+    return kept
+
+
+def stored_buyer(row):
+    return {
+        "title": (row.get("username") or "unknown")[:80],
+        "text": row.get("post_text") or "",
+        "url": row.get("source_url") or "",
+        "platform": row.get("source_platform") or "web",
+    }
+
+
+def stored_seller(row):
+    availability = row.get("availability") or "unconfirmed"
+    return {
+        "title": (row.get("username") or "unknown")[:80],
+        "text": row.get("listing_text") or "",
+        "url": row.get("source_url") or "",
+        "platform": row.get("source_platform") or "web",
+        "price": row.get("price"),
+        "shipping": row.get("shipping"),
+        "availability": availability,
+        "qualifying": availability == "available",
+    }
+
+
+def offer_buyer_query(seller):
+    """The offer's own item. A market-scope note is not a buyer request."""
+    text = seller.get("text") or ""
+    title = seller.get("title") or ""
+    if text.startswith("Market discovery\n") or title.startswith("Market discovery"):
+        return ""
+    item = requested_item(title).strip() or requested_item(text).strip()
+    if not item or item.lower().startswith("market discovery"):
+        return ""
+    return item
+
+
+def buyer_queries_for_offers(sellers, limit):
+    """One buyer search per current offer, inside the existing match limit."""
+    queries = []
+    overflow = False
+    for seller in sellers or []:
+        if seller.get("cross_post"):
+            continue
+        if (seller.get("availability") or "unconfirmed") == "ended":
+            continue
+        query = offer_buyer_query(seller)
+        if not query or query in queries:
+            continue
+        if len(queries) >= limit:
+            overflow = True
+            break
+        queries.append(query)
+    return queries, overflow
+
+
+def market_comparisons(buyers, sellers):
+    """Pair stored and newly found requests with stored and newly found offers."""
+    pairs = []
+    offer_rows = [
+        seller for seller in unique_by_url(sellers)
+        if not seller.get("cross_post")
+    ]
+    for buyer in unique_by_url(buyers):
+        if str(buyer.get("text") or "").startswith("Market discovery\n"):
+            continue
+        for seller in offer_rows:
+            if buyer.get("url") and buyer.get("url") == seller.get("url"):
+                continue
+            pairs.append((buyer, seller))
+    return pairs
+
+
+def load_market_records(sb, market_id):
+    buyer_rows = (
+        sb.table("buyer_posts")
+        .select("username,post_text,source_url,source_platform")
+        .eq("section_id", market_id)
+        .execute()
+        .data
+        or []
+    )
+    seller_rows = (
+        sb.table("seller_listings")
+        .select("username,listing_text,source_url,source_platform,price,shipping,availability")
+        .eq("section_id", market_id)
+        .execute()
+        .data
+        or []
+    )
+    return [stored_buyer(row) for row in buyer_rows], [stored_seller(row) for row in seller_rows]
+
+
+def _remember_buyer(sb, market_id, post):
+    observed = datetime.now(timezone.utc).isoformat()
+    _save_source(sb, "buyer_posts", post["url"], {
+        "username": (post.get("title") or "unknown")[:80],
+        "post_text": (post.get("text") or "")[:5000],
+        "source_url": post["url"],
+        "source_platform": post.get("platform") or "web",
+        "source_id": source_identity(post["url"]),
+        "section_id": market_id,
+        "scraped_at": observed,
+        "observed_at": observed,
+    })
+
+
 def run_market_discovery(sb, openai_client, seen, run):
     """Find public buyers and sellers for one market. The market name is not a buyer."""
     run_id = run["id"]
@@ -1720,21 +1897,19 @@ def run_market_discovery(sb, openai_client, seen, run):
         _finish_run(sb, run_id, "Market discovery not connected yet")
         return
     print(f"    Market discovery scope: {market_name}")
+    try:
+        existing_buyers, existing_sellers = load_market_records(sb, market_id)
+    except Exception as exc:
+        if rpc_failure(exc) == "missing":
+            _finish_run(sb, run_id, "Market discovery not connected yet")
+        else:
+            _finish_run(sb, run_id, search_outcome([], f"existing market records could not be read — {exc}"))
+        return
     buyers = []
     for post in search_wtb_posts(f"\"{market_name}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
         if is_market_discovery_run({"search_query": post.get("text") or ""}):
             continue
-        observed = datetime.now(timezone.utc).isoformat()
-        _save_source(sb, "buyer_posts", post["url"], {
-            "username": (post.get("title") or "unknown")[:80],
-            "post_text": (post.get("text") or "")[:5000],
-            "source_url": post["url"],
-            "source_platform": post.get("platform") or "web",
-            "source_id": source_identity(post["url"]),
-            "section_id": market_id,
-            "scraped_at": observed,
-            "observed_at": observed,
-        })
+        _remember_buyer(sb, market_id, post)
         buyers.append(post)
         mark_seen(seen, post["url"], post.get("title", ""))
     found = search_listings(market_name, seen, max_keep=8, buyer_text=market_name)
@@ -1757,31 +1932,43 @@ def run_market_discovery(sb, openai_client, seen, run):
             "scraped_at": observed,
             "observed_at": observed,
         })
+    incomplete = found.get("incomplete") or ""
+    offer_queries, overflow = buyer_queries_for_offers(sellers, MATCH_TARGET)
+    if overflow and not incomplete:
+        incomplete = "the buyer-search limit was reached before every offer was checked"
+    for query in offer_queries:
+        for post in search_wtb_posts(f"\"{query}\" (WTB OR \"want to buy\" OR \"looking for\")", seen):
+            if is_market_discovery_run({"search_query": post.get("text") or ""}):
+                continue
+            _remember_buyer(sb, market_id, post)
+            buyers.append(post)
+            mark_seen(seen, post["url"], post.get("title", ""))
+    compared = market_comparisons(buyers + existing_buyers, sellers + existing_sellers)
     verified = 0
-    for buyer in buyers:
-        if verified >= MATCH_TARGET:
-            break
-        for seller in sellers:
-            if verified >= MATCH_TARGET:
-                break
-            if seller.get("cross_post"):
-                continue
-            if not qualifies(seller, buyer.get("text") or ""):
-                print(f"    Rejected candidate, still searching: {(seller.get('title') or '')[:70]}")
-                continue
-            result = ai_evaluate_match(
-                buyer.get("text") or "", seller.get("text") or "", openai_client, sb, False,
-            )
-            if not (result and result.get("match") and result.get("confidence", 0) >= 60):
-                continue
-            if not qualifies(seller, buyer.get("text") or ""):
-                continue
-            if push_match(sb, buyer, seller, result, section_id=market_id):
-                verified += 1
-                mark_seen(seen, seller["url"], seller.get("title", ""))
-    summary = search_outcome([{"qualifying": True}] * verified, found.get("incomplete"))
-    if not buyers and not sellers and not found.get("incomplete"):
-        summary = "No qualifying match found in the sources checked"
+    try:
+        if compared and usage_blocked(sb):
+            incomplete = reserve_closed_reason("cap")
+        else:
+            for buyer, seller in compared:
+                if verified >= MATCH_TARGET:
+                    break
+                if not qualifies(seller, buyer.get("text") or ""):
+                    print(f"    Rejected candidate, still searching: {(seller.get('title') or '')[:70]}")
+                    continue
+                result = ai_evaluate_match(
+                    buyer.get("text") or "", seller.get("text") or "", openai_client, sb, False,
+                )
+                if not (result and result.get("match") and result.get("confidence", 0) >= 60):
+                    continue
+                if not qualifies(seller, buyer.get("text") or ""):
+                    continue
+                _match_id, created = push_match(sb, buyer, seller, result, section_id=market_id)
+                if created:
+                    verified += 1
+                    mark_seen(seen, seller["url"], seller.get("title", ""))
+    except ReservationClosed as exc:
+        incomplete = exc.reason
+    summary = search_outcome([{"qualifying": True}] * verified, incomplete)
     _finish_run(sb, run_id, summary)
     print(f"    Market discovery complete: {summary}")
 
@@ -1791,6 +1978,11 @@ def check_manual_requests(sb, openai_client, seen):
     """Check Supabase for manual run requests from the website."""
     try:
         claimed = claim_next_run(sb)
+    except ClaimClosed as exc:
+        print(f"    Claim failed closed: {exc.reason}")
+        return False
+    run_id = None
+    try:
         if claimed == "fallback":
             result = sb.table("seeker_runs").select("*").eq("status", "pending").order(
                 "requested_at", desc=False
@@ -1847,9 +2039,14 @@ def check_manual_requests(sb, openai_client, seen):
                 for seller in listings:
                     if verified_found >= MATCH_TARGET:
                         break
-                    if usage_blocked(sb):
-                        incomplete = f"daily OpenAI cap of {DAILY_AI_CAP} reached"
-                        print(f"    Daily OpenAI cap reached ({DAILY_AI_CAP}).")
+                    try:
+                        if usage_blocked(sb):
+                            incomplete = reserve_closed_reason("cap")
+                            print(f"    {incomplete}")
+                            break
+                    except ReservationClosed as exc:
+                        incomplete = exc.reason
+                        print(f"    {exc.reason}")
                         break
                     if not seller.get("qualifying"):
                         print(
@@ -1857,7 +2054,12 @@ def check_manual_requests(sb, openai_client, seen):
                             f"[{availability_label(seller.get('availability'))} price={seller.get('price')}]"
                         )
                         continue
-                    result_ai = ai_evaluate_match(buyer["text"], seller["text"], openai_client, sb)
+                    try:
+                        result_ai = ai_evaluate_match(buyer["text"], seller["text"], openai_client, sb)
+                    except ReservationClosed as exc:
+                        incomplete = exc.reason
+                        print(f"    {exc.reason}")
+                        break
                     if usage_blocked(sb) and not result_ai:
                         incomplete = f"daily OpenAI cap of {DAILY_AI_CAP} reached"
                         break
@@ -1867,7 +2069,7 @@ def check_manual_requests(sb, openai_client, seen):
                     if not qualifies(seller, buyer["text"]):
                         print(f"    Requirement failed: {availability_label(seller.get('availability'))}")
                         continue
-                    match_id = push_match(sb, buyer, seller, result_ai)
+                    match_id, _created = push_match(sb, buyer, seller, result_ai)
                     if match_id:
                         verified_found += 1
                         matches_found += 1
@@ -1893,6 +2095,14 @@ def check_manual_requests(sb, openai_client, seen):
         print(f"    Manual request complete: {summary}")
         return True
 
+    except ReservationClosed as exc:
+        if run_id:
+            summary = search_outcome([], exc.reason)
+            _finish_run(sb, run_id, summary)
+            print(f"    {summary}")
+            return True
+        print(f"    {exc.reason}")
+        return False
     except Exception as e:
         print(f"    Manual request error: {e}")
         return False
@@ -2342,6 +2552,27 @@ def check_rules():
     assert reservation_id_from(False) is None
     assert reservation_id_from(["550e8400-e29b-41d4-a716-446655440000"]) == "550e8400-e29b-41d4-a716-446655440000"
     assert WORKER_REVISION == "reservation-v2"
+    assert rpc_failure(TimeoutError("The read operation timed out")) == "timeout"
+    assert rpc_failure(Exception("permission denied for function reserve_seeker_ai")) == "permission"
+    assert rpc_failure(Exception("Could not find the function public.claim_next_seeker_run")) == "missing"
+    assert reserve_closed_reason("timeout") == "AI reservation timed out"
+    assert claim_closed_reason("permission") == "job claim was denied"
+    assert search_outcome([], reserve_closed_reason("cap")).startswith("Search incomplete — daily OpenAI cap")
+    assert search_outcome([{"qualifying": True}], "AI reservation timed out").startswith("Found 1 qualifying match(es). Search incomplete")
+    scope = market_scope_text("Epiphone USA Map", "market-1")
+    assert offer_buyer_query({"title": "scope", "text": scope}) == ""
+    assert offer_buyer_query({"title": "Epiphone USA Map guitar", "text": "for sale"}) == "Epiphone USA Map guitar"
+    compared = market_comparisons(
+        [{"text": scope, "url": "https://scope.example"}, {"text": "WTB Epiphone USA Map", "url": "https://buyer.example"}],
+        [{"text": "for sale", "url": "https://seller.example", "availability": "available"}],
+    )
+    assert [buyer["url"] for buyer, _seller in compared] == ["https://buyer.example"]
+    offer_queries, overflow = buyer_queries_for_offers([
+        {"title": "Ended guitar", "text": "listing ended", "availability": "ended", "url": "https://ended.example"},
+        {"title": "Epiphone USA Map guitar", "text": "for sale", "availability": "available", "url": "https://live.example"},
+    ], 4)
+    assert offer_queries == ["Epiphone USA Map guitar"]
+    assert overflow is False
     print("availability rules ok")
 
 
