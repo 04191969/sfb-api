@@ -1,6 +1,6 @@
 import os
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sfb_api.settings")
 
@@ -306,12 +306,15 @@ class AssessmentTests(unittest.TestCase):
             ],
             "reader": [],
         }
+        observed = datetime(2026, 11, 16, 0, 43, tzinfo=timezone.utc)
+        store = MemoryEvidence(interchange=[record])
         add_assessment(
             found,
-            evidence=MemoryEvidence(interchange=[record]),
+            evidence=store,
             confirm_fitment=lambda *_args: False,
-            today=TODAY,
+            today=observed,
         )
+        self.assertEqual(store.rows[("ebay", "1")]["observed_at"], "2026-11-16T00:43:00+00:00")
         first = found["listings"][0]
         self.assertEqual(first["request_match"]["status"], "qualifying")
         self.assertEqual(first["request_match"]["fitment"], "interchange")
@@ -319,6 +322,16 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(first["assessment"]["market"]["status"], "limited")
         self.assertEqual(first["assessment"]["market"]["reference_price"], "100.00")
         self.assertIn("not verified", first["assessment"]["summary"])
+
+        later = asking("later", "ABC123", "20.00")
+        later["observed_at"] = (observed + timedelta(minutes=1)).isoformat()
+        current = asking("current", "ABC123", "100.00")
+        current["observed_at"] = observed.isoformat()
+        subject = asking("self", "ABC123", "80.00")
+        compared = assess_listing(subject, [subject, current, later], today=observed)
+        self.assertEqual(compared["market"]["status"], "limited")
+        self.assertEqual(compared["market"]["count"], 1)
+        self.assertEqual(compared["market"]["reference_price"], "100.00")
 
         bare = {
             "request": request,

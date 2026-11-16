@@ -6,7 +6,7 @@ count, the age, and the spread. None produces Needs data. This does not
 decide whether a dealer should buy.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 ASKING_DAYS = 14
@@ -88,24 +88,32 @@ def _text(value):
     return " ".join(str(value or "").split())
 
 
-def _day(value):
+def _instant(value):
+    """A UTC instant. A calendar day is the start of that UTC day."""
     if isinstance(value, datetime):
-        return value.date()
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
     if isinstance(value, date):
-        return value
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
     text = str(value or "").strip()
     if not text:
         return None
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
-def _age(today, observed):
-    if observed is None or observed > today:
+def _age(assessment, observed):
+    assessment = _instant(assessment)
+    observed = _instant(observed)
+    if assessment is None or observed is None or observed > assessment:
         return None
-    return (today - observed).days
+    return (assessment - observed).days
 
 
 def _same_currency(left, right):
@@ -224,14 +232,14 @@ def same_part(subject, evidence, interchange):
     return interchange_applies(subject, evidence_number, interchange)
 
 
-def _recent(status, row, today):
+def _recent(status, row, assessment):
     if status == "sold":
-        observed = _day(row.get("sold_at"))
+        observed = row.get("sold_at")
         limit = SOLD_DAYS
     else:
-        observed = _day(row.get("observed_at"))
+        observed = row.get("observed_at")
         limit = ASKING_DAYS
-    age = _age(today, observed)
+    age = _age(assessment, observed)
     if age is None or age > limit:
         return None
     return age
@@ -482,7 +490,7 @@ def _blocked_set(match, set_name, basis, currency):
 
 def assess_listing(listing, evidence, interchange=None, today=None, qualifying_keys=None):
     """Assess one listing. Price is compared only for a qualifying same-part offer."""
-    today = today or date.today()
+    today = today or datetime.now(timezone.utc)
     number = part_number_of(listing)
     subject = dict(listing)
     subject["part_number"] = number
