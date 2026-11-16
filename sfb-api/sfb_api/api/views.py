@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .matcher import analyze_match
+from .seeker_markets import assemble_markets, market_detail
 from .supabase_client import get_supabase
 
 
@@ -101,6 +102,24 @@ def match_action(request, match_id):
         return _server_error(e)
 
 
+def _seeker_rows(sb):
+    sections = sb.table("sections").select("*").execute().data or []
+    matches = sb.table("matches").select(
+        "id, section_id, buyer_post_id, seller_listing_id, match_decision, "
+        "status, ai_reasoning, created_at"
+    ).execute().data or []
+    buyers = sb.table("buyer_posts").select(
+        "id, post_text, source_platform, source_url"
+    ).execute().data or []
+    sellers = sb.table("seller_listings").select(
+        "id, listing_text, price, source_platform, source_url"
+    ).execute().data or []
+    runs = sb.table("seeker_runs").select(
+        "id, search_query, status, result_summary, requested_at, completed_at"
+    ).execute().data or []
+    return sections, matches, buyers, sellers, runs
+
+
 # ── Sections ──
 
 @api_view(["GET"])
@@ -113,6 +132,28 @@ def section_list(request):
 
     except Exception as e:
         return _server_error(e)
+
+
+@api_view(["GET"])
+def seeker_markets(request):
+    """Markets and counts from linked records. Discovery controls stay off."""
+    try:
+        payload = assemble_markets(*_seeker_rows(get_supabase()))
+    except Exception as e:
+        return _server_error(e)
+    return Response(payload)
+
+
+@api_view(["GET"])
+def seeker_market_detail(request, market_id):
+    """One market, addressed by its id, an older section id, or its slug."""
+    try:
+        payload = market_detail(market_id, *_seeker_rows(get_supabase()))
+    except Exception as e:
+        return _server_error(e)
+    if payload is None:
+        return Response({"error": "Market not found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response(payload)
 
 
 # ── Listings ──
