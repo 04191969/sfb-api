@@ -549,3 +549,66 @@ class BuyerIntentTests(unittest.TestCase):
         sale = worker["author_intent"](denied)
         self.assertEqual(sale["role"], "sell")
         self.assertEqual(sale["wanted"], "")
+
+    def test_mixed_posts_attach_following_requirements_in_both_orders(self):
+        sell_then_buy = (
+            "WTS Gibson Les Paul, but WTB Epiphone USA Map. "
+            "Budget: $850 plus shipping, firm maximum. "
+            "Must include the original case."
+        )
+        reversed_mixed = self.worker["author_intent"](sell_then_buy)
+        self.assertEqual(reversed_mixed["role"], "mixed")
+        self.assertIn("Epiphone USA Map", reversed_mixed["wanted"])
+        self.assertIn("Budget: $850 plus shipping, firm maximum.", reversed_mixed["wanted"])
+        self.assertIn("Must include the original case.", reversed_mixed["wanted"])
+        self.assertNotIn("850", reversed_mixed["offered"])
+        self.assertNotIn("original case", reversed_mixed["offered"])
+        self.assertIn("Gibson", reversed_mixed["offered"])
+        cap = self.worker["buyer_price_cap"](reversed_mixed["wanted"])
+        self.assertEqual(cap["limit"], 850)
+        self.assertTrue(cap["plus_shipping"])
+        self.assertFalse(cap["negotiable"])
+        listing = {
+            "availability": "available",
+            "price": 2000,
+            "shipping": 20,
+            "title": "Epiphone USA Map",
+            "text": "for sale",
+            "location": "",
+        }
+        self.assertFalse(self.worker["qualifies"](listing, reversed_mixed["wanted"]))
+        buyer = self.worker["as_matching_buyer"]({
+            "text": sell_then_buy,
+            "url": "https://forum.example/sell-then-buy",
+            "platform": "web",
+            "title": "mixed",
+        })
+        self.assertIn("Must include the original case.", buyer["text"])
+        self.assertNotIn("Gibson", buyer["text"])
+
+        buy_then_sell = (
+            "WTB Epiphone USA Map, but WTS Gibson Les Paul for sale. "
+            "Asking $2000 including shipping."
+        )
+        forward_mixed = self.worker["author_intent"](buy_then_sell)
+        self.assertEqual(forward_mixed["role"], "mixed")
+        self.assertIn("Epiphone USA Map", forward_mixed["wanted"])
+        self.assertNotIn("2000", forward_mixed["wanted"])
+        self.assertNotIn("including shipping", forward_mixed["wanted"])
+        self.assertIn("Gibson Les Paul", forward_mixed["offered"])
+        self.assertIn("Asking $2000 including shipping.", forward_mixed["offered"])
+        self.assertNotIn("Epiphone", forward_mixed["offered"])
+
+    def test_curly_apostrophe_does_not_create_buying_intent(self):
+        statement = "I don\u2019t want to buy an Epiphone USA Map. Selling mine."
+        intent = self.worker["author_intent"](statement)
+        self.assertEqual(intent["role"], "sell")
+        self.assertEqual(intent["wanted"], "")
+        self.assertIn("Selling mine", intent["offered"])
+        self.assertEqual(intent["source"], statement)
+        self.assertIsNone(self.worker["as_matching_buyer"]({
+            "text": statement,
+            "url": "https://forum.example/curly",
+            "platform": "web",
+            "title": "sale",
+        }))

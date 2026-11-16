@@ -1828,10 +1828,22 @@ _NEGATION_BEFORE = re.compile(
     r"(?i)(?:\bnot\b|\bno\b|\bnever\b|\bwithout\b|\bno longer\b|\bnot currently\b|n't\b)"
     r"(?:\s+\w+){0,4}\s*$"
 )
+_APOSTROPHE_FOLDS = str.maketrans({
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201b": "'",
+    "\u02bc": "'",
+    "\u2032": "'",
+})
+
+
+def _straight_apostrophes(text):
+    """Curly and straight apostrophes are the same word for negation."""
+    return (text or "").translate(_APOSTROPHE_FOLDS)
 
 
 def _negated_at(clause, start):
-    prefix = (clause or "")[max(0, start - 48):start]
+    prefix = _straight_apostrophes((clause or "")[max(0, start - 48):start])
     return _NEGATION_BEFORE.search(prefix) is not None
 
 
@@ -1882,22 +1894,18 @@ def _split_mixed_clause(clause):
         if not _negated_at(clause, match.start()):
             marks.append((match.start(), "sell"))
     marks.sort()
-    buys, sells = [], []
+    ordered = []
     if not marks:
-        return buys, sells
+        return ordered
     leading = (clause or "")[:marks[0][0]].strip(" ,;.")
     for index, (start, kind) in enumerate(marks):
         end = marks[index + 1][0] if index + 1 < len(marks) else len(clause or "")
         piece = (clause or "")[start:end].strip(" ,;.")
         if index == 0 and leading:
             piece = f"{leading} {piece}".strip()
-        if not piece:
-            continue
-        if kind == "buy":
-            buys.append(piece)
-        else:
-            sells.append(piece)
-    return buys, sells
+        if piece:
+            ordered.append((kind, piece))
+    return ordered
 
 
 def _join_clauses(parts):
@@ -1912,19 +1920,18 @@ def author_intent(text, url=""):
     for clause in _intent_clauses(author_statement(text)):
         kind = _clause_intent(clause)
         if kind == "mixed":
-            part_buys, part_sells = _split_mixed_clause(clause)
-            if part_buys:
-                if not side:
-                    buys.extend(pending)
-                    pending = []
-                side = "buy"
-                buys.extend(part_buys)
-            if part_sells:
-                if not side and not part_buys:
-                    sells.extend(pending)
-                    pending = []
-                side = "sell"
-                sells.extend(part_sells)
+            ordered = _split_mixed_clause(clause)
+            if not ordered:
+                continue
+            if pending:
+                (buys if ordered[0][0] == "buy" else sells).extend(pending)
+                pending = []
+            for part_kind, piece in ordered:
+                if part_kind == "buy":
+                    buys.append(piece)
+                else:
+                    sells.append(piece)
+            side = ordered[-1][0]
             continue
         if kind == "buy":
             if not side:
@@ -3025,6 +3032,22 @@ def check_rules():
     assert "850" not in mixed_kept["offered"]
     assert author_intent("Not looking to buy an Epiphone USA Map.")["role"] == "unresolved"
     assert author_intent("I don't want to buy an Epiphone USA Map.")["role"] == "unresolved"
+    sell_then_buy = "WTS Gibson Les Paul, but WTB Epiphone USA Map. Budget: $850 plus shipping, firm maximum. Must include the original case."
+    reversed_mixed = author_intent(sell_then_buy)
+    assert "Epiphone USA Map" in reversed_mixed["wanted"]
+    assert "Budget: $850 plus shipping, firm maximum." in reversed_mixed["wanted"]
+    assert "Must include the original case." in reversed_mixed["wanted"]
+    assert "850" not in reversed_mixed["offered"]
+    assert "original case" not in reversed_mixed["offered"]
+    assert "Gibson" in reversed_mixed["offered"]
+    buy_then_sell = "WTB Epiphone USA Map, but WTS Gibson Les Paul for sale. Asking $2000 including shipping."
+    forward_mixed = author_intent(buy_then_sell)
+    assert "2000" not in forward_mixed["wanted"]
+    assert "including shipping" in forward_mixed["offered"]
+    curly = "I don\u2019t want to buy an Epiphone USA Map. Selling mine."
+    curly_sale = author_intent(curly)
+    assert curly_sale["role"] == "sell"
+    assert curly_sale["wanted"] == ""
     misclassified = {"text": selling, "url": facebook, "platform": "facebook", "title": selling}
     assert market_comparisons([misclassified], [{"url": f"https://reverb.com/item/{i}", "text": "for sale"} for i in range(4)]) == []
     priced = dict(stale)
