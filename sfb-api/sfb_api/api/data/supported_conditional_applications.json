@@ -1,0 +1,263 @@
+[
+  {
+    "review_id": "Holley:19-507",
+    "brand": "Holley Sniper EFI",
+    "part_number": "19-507",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Ford",
+    "model": "Mustang",
+    "year_from": 1964,
+    "year_to": 1968,
+    "conditions": {
+      "capacity_gallons": 16,
+      "assembly": "bare fuel tank; no pump or sender",
+      "fuel_pump_lph": null,
+      "installation": "stock replacement tank",
+      "filler_neck": "not attached"
+    },
+    "source_url": "https://www.holley.com/products/fuel_systems/fuel_pumps_regulators_and_filters/fuel_tanks/stock_replacement_fuel_tanks/parts/19-507",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "engine applicability not separately stated",
+      "trim applicability not separately stated",
+      "market not explicitly stated"
+    ],
+    "interpretation": "Manufacturer states this Mustang application. Do not extend to Cougar, cross-match capacities or assemblies, or infer fitment to modified vehicles. Source support is not an unconditional listing qualification."
+  },
+  {
+    "review_id": "Holley:19-518",
+    "brand": "Holley Sniper EFI",
+    "part_number": "19-518",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Ford",
+    "model": "Mustang",
+    "year_from": 1969,
+    "year_to": 1970,
+    "conditions": {
+      "capacity_gallons": 20,
+      "assembly": "bare fuel tank; no pump or sender",
+      "fuel_pump_lph": null,
+      "installation": "stock replacement tank",
+      "filler_neck": "not attached"
+    },
+    "source_url": "https://www.holley.com/products/fuel_systems/fuel_pumps_regulators_and_filters/fuel_tanks/stock_replacement_fuel_tanks/parts/19-518",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "engine applicability not separately stated",
+      "trim applicability not separately stated",
+      "market not explicitly stated"
+    ],
+    "interpretation": "Manufacturer states this Mustang application. Do not extend to Cougar, cross-match capacities or assemblies, or infer fitment to modified vehicles. Source support is not an unconditional listing qualification."
+  },
+  {
+    "review_id": "Holley:19-519",
+    "brand": "Holley Sniper EFI",
+    "part_number": "19-519",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Ford",
+    "model": "Mustang",
+    "year_from": 1969,
+    "year_to": 1970,
+    "conditions": {
+      "capacity_gallons": 22,
+      "assembly": "bare fuel tank; no pump or sender",
+      "fuel_pump_lph": null,
+      "installation": "stock replacement tank",
+      "filler_neck": "not attached"
+    },
+    "source_url": "https://www.holley.com/products/fuel_systems/fuel_pumps_regulators_and_filters/fuel_tanks/stock_replacement_fuel_tanks/parts/19-519",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "engine applicability not separately stated",
+      "trim applicability not separately stated",
+      "market not explicitly stated"
+    ],
+    "interpretation": "Manufacturer states this Mustang application. Do not extend to Cougar, cross-match capacities or assemblies, or infer fitment to modified vehicles. Source support is not an unconditional listing qualification."
+  },
+  {
+    "review_id": "Holley:19-102",
+    "brand": "Holley Sniper EFI",
+    "part_number": "19-102",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Ford",
+    "model": "Mustang",
+    "year_from": 1964,
+    "year_to": 1968,
+    "conditions": {
+      "capacity_gallons": 16,
+      "assembly": "tank with fuel pump and sender",
+      "fuel_pump_lph": 255,
+      "installation": "EFI conversion",
+      "filler_neck": "not included; source requires existing/replacement neck"
+    },
+    "source_url": "https://www.holley.com/products/fuel_systems/fuel_pumps_regulators_and_filters/fuel_tanks/efi_conversion_fuel_tanks/parts/19-102",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "engine applicability not separately stated",
+      "trim applicability not separately stated",
+      "market not explicitly stated"
+    ],
+    "interpretation": "Manufacturer states this Mustang application. Do not extend to Cougar, cross-match capacities or assemblies, or infer fitment to modified vehicles. Source support is not an unconditional listing qualification."
+  },
+  {
+    "review_id": "Holley:19-117",
+    "brand": "Holley Sniper EFI",
+    "part_number": "19-117",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Ford",
+    "model": "Mustang",
+    "year_from": 1969,
+    "year_to": 1970,
+    "conditions": {
+      "capacity_gallons": 22,
+      "assembly": "tank with fuel pump and sender",
+      "fuel_pump_lph": 255,
+      "installation": "EFI conversion",
+      "filler_neck": "not included; source requires existing/replacement neck"
+    },
+    "source_url": "https://www.holley.com/products/fuel_systems/fuel_pumps_regulators_and_filters/fuel_tanks/efi_conversion_fuel_tanks/parts/19-117",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "engine applicability not separately stated",
+      "trim applicability not separately stated",
+      "market not explicitly stated"
+    ],
+    "interpretation": "Manufacturer states this Mustang application. Do not extend to Cougar, cross-match capacities or assemblies, or infer fitment to modified vehicles. Source support is not an unconditional listing qualification."
+  },
+  {
+    "review_id": "Holley:19-402",
+    "brand": "Holley Sniper EFI",
+    "part_number": "19-402",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Ford",
+    "model": "Mustang",
+    "year_from": 1964,
+    "year_to": 1968,
+    "conditions": {
+      "capacity_gallons": 16,
+      "assembly": "tank with fuel pump and sender",
+      "fuel_pump_lph": 400,
+      "installation": "EFI conversion",
+      "filler_neck": "not included; source requires existing/replacement neck"
+    },
+    "source_url": "https://www.holley.com/products/fuel_systems/fuel_pumps_regulators_and_filters/fuel_tanks/efi_conversion_fuel_tanks/parts/19-402",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "engine applicability not separately stated",
+      "trim applicability not separately stated",
+      "market not explicitly stated"
+    ],
+    "interpretation": "Manufacturer states this Mustang application. Do not extend to Cougar, cross-match capacities or assemblies, or infer fitment to modified vehicles. Source support is not an unconditional listing qualification."
+  },
+  {
+    "review_id": "Holley:19-417",
+    "brand": "Holley Sniper EFI",
+    "part_number": "19-417",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Ford",
+    "model": "Mustang",
+    "year_from": 1969,
+    "year_to": 1970,
+    "conditions": {
+      "capacity_gallons": 22,
+      "assembly": "tank with fuel pump and sender",
+      "fuel_pump_lph": 400,
+      "installation": "EFI conversion",
+      "filler_neck": "1970 Mustang filler neck required; not included"
+    },
+    "source_url": "https://www.holley.com/products/fuel_systems/fuel_pumps_regulators_and_filters/fuel_tanks/efi_conversion_fuel_tanks/parts/19-417",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "engine applicability not separately stated",
+      "trim applicability not separately stated",
+      "market not explicitly stated"
+    ],
+    "interpretation": "Manufacturer states this Mustang application. Do not extend to Cougar, cross-match capacities or assemblies, or infer fitment to modified vehicles. Source support is not an unconditional listing qualification."
+  },
+  {
+    "review_id": "Metra:99-8249:Toyota:Camry:2015",
+    "brand": "Metra",
+    "part_number": "99-8249",
+    "identifier_type": "aftermarket_manufacturer_part_number",
+    "oem_part_number": null,
+    "make": "Toyota",
+    "model": "Camry",
+    "year_from": 2015,
+    "year_to": 2015,
+    "conditions": {
+      "assembly": "dash installation kit: trim panel, brackets, pocket and screws",
+      "radio_format": "ISO DIN with pocket or ISO DDIN",
+      "scope": "physical dash mounting only; wiring, antenna and steering-wheel interfaces separate"
+    },
+    "source_url": "https://www.metraonline.com/product/99-8249",
+    "instruction_url": "https://www.metraonline.com/product/99-8249/documents/file/INST99-8249.pdf",
+    "evidence_status": "manufacturer_supported_conditional_application",
+    "source_checked": "2026-11-15",
+    "live_imported": false,
+    "price_eligible": false,
+    "import_blockers": [
+      "Live database access unavailable",
+      "Brand-scoped aftermarket identifier and structured condition mapping required"
+    ],
+    "unknown_fields": [
+      "market not explicitly stated"
+    ],
+    "interpretation": "Original batch contains 2015 only. Manufacturer documentation states 2015–2017, but this review does not create additional years. Does not establish electrical compatibility."
+  }
+]

@@ -598,6 +598,15 @@ def listing_find(request):
             brake_configuration=request.data.get("brake_configuration") or "",
             axle=request.data.get("axle") or "",
             side=request.data.get("side") or "",
+            capacity_gallons=request.data.get("capacity_gallons") or "",
+            assembly=request.data.get("assembly") or "",
+            installation=request.data.get("installation") or "",
+            filler_neck=request.data.get("filler_neck") or "",
+            fuel_pump_lph=request.data.get("fuel_pump_lph") or "",
+            radio_format=request.data.get("radio_format") or "",
+            scope=request.data.get("scope") or "",
+            brand=request.data.get("brand") or "",
+            part_number=request.data.get("part_number") or "",
         )
     except Exception as exc:
         return _server_error(exc)

@@ -220,7 +220,7 @@ def _source_reader(listings):
     return rows
 
 
-def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None, now=None, budget_seconds=SEARCH_BUDGET, confirm_fitment=None, variant="", brake_configuration="", axle="", side=""):
+def find_listings(part_name, make="", model="", year="", carcode=None, get=None, pause=None, ebay=None, old_cars=None, read=None, evidence=None, today=None, now=None, budget_seconds=SEARCH_BUDGET, confirm_fitment=None, variant="", brake_configuration="", axle="", side="", capacity_gallons="", assembly="", installation="", filler_neck="", fuel_pump_lph="", radio_format="", scope="", brand="", part_number=""):
     """Return listings, sources that were skipped, and the raw text a reader can use."""
     part_name = str(part_name or "").strip()
     request = {
@@ -232,6 +232,15 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
         "brake_configuration": str(brake_configuration or "").strip(),
         "axle": str(axle or "").strip(),
         "side": str(side or "").strip(),
+        "capacity_gallons": capacity_gallons,
+        "assembly": assembly,
+        "installation": installation,
+        "filler_neck": filler_neck,
+        "fuel_pump_lph": fuel_pump_lph,
+        "radio_format": radio_format,
+        "scope": scope,
+        "brand": brand,
+        "part_number": part_number,
     }
     text = search_text(part_name, make, model, year)
     listings = []
@@ -335,7 +344,10 @@ def find_listings(part_name, make="", model="", year="", carcode=None, get=None,
             read=read,
             read_timeout=min(15, max(8, int(time_left()) - 12)),
         )
-    return add_assessment(found, evidence=evidence, today=today, confirm_fitment=confirm_fitment)
+    found = add_assessment(found, evidence=evidence, today=today, confirm_fitment=confirm_fitment)
+    from .reviewed_parts import annotate_search
+
+    return annotate_search(found)
 
 
 def _money_label(amount, currency):
