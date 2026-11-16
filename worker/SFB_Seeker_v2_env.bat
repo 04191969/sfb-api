@@ -205,17 +205,134 @@ def _settle_ai(sb, reservation_id, outcome):
     return True
 
 
-def write_heartbeat(sb):
+def code_version():
+    """The commit this process loaded. The search baseline remains f972a58."""
     try:
-        sb.table("seeker_worker_heartbeat").upsert({
-            "worker_id": WORKER_ID,
-            "seen_at": datetime.now(timezone.utc).isoformat(),
-            "detail": "manual discovery and dashboard requests",
-            "revision": WORKER_REVISION,
+        root = Path(__file__).resolve().parents[1]
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=str(root), stderr=subprocess.DEVNULL, timeout=5,
+        )
+        return out.decode().strip() or "f972a58"
+    except Exception:
+        return "f972a58"
+
+
+def write_heartbeat(sb):
+    version = code_version()
+    payload = {
+        "worker_id": WORKER_ID,
+        "seen_at": datetime.now(timezone.utc).isoformat(),
+        "detail": f"manual discovery and dashboard requests; code {version}",
+        "revision": WORKER_REVISION,
+        "code_version": version,
+    }
+    try:
+        sb.table("seeker_worker_heartbeat").upsert(payload).execute()
+    except Exception:
+        payload.pop("code_version", None)
+        try:
+            sb.table("seeker_worker_heartbeat").upsert(payload).execute()
+        except Exception:
+            return False
+    return True
+
+
+def _rpc_quiet(sb, name, args):
+    try:
+        return sb.rpc(name, args).execute()
+    except Exception as exc:
+        print(f"    {name} is not installed yet.")
+        return None
+
+
+def recover_after_restart(sb):
+    """Requeue a dead worker's job. An open model call stays uncertain, not failed."""
+    _rpc_quiet(sb, "hold_uncertain_seeker_ai", {})
+    _rpc_quiet(sb, "requeue_stale_seeker_runs", {"stale_seconds": 180})
+
+
+def enqueue_due_markets(sb):
+    """Enabled markets only. Every market is paused until a control row says otherwise."""
+    try:
+        controls = sb.table("seeker_market_controls").select("*").eq("enabled", True).execute().data or []
+    except Exception:
+        return
+    now = datetime.now(timezone.utc)
+    for row in controls:
+        market_id = row.get("market_id")
+        if not market_id:
+            continue
+        discovery_due = _moment_due(row.get("next_discovery_at"), now)
+        recheck_due = _moment_due(row.get("next_recheck_at"), now)
+        if discovery_due:
+            name = _market_label(sb, market_id)
+            if name:
+                _rpc_quiet(sb, "enqueue_market_discovery", {
+                    "market": market_id,
+                    "query": market_scope_text(name, market_id),
+                    "job_trigger": "schedule",
+                })
+                _schedule_next(sb, market_id, "next_discovery_at", int(row.get("discovery_interval_minutes") or 30))
+        if recheck_due:
+            _enqueue_recheck(sb, market_id)
+            _schedule_next(sb, market_id, "next_recheck_at", int(row.get("recheck_interval_hours") or 6) * 60)
+
+
+def _market_label(sb, market_id):
+    try:
+        rows = sb.table("sections").select("name,make,model").eq("id", market_id).limit(1).execute().data or []
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    row = rows[0]
+    return row.get("name") or " ".join(part for part in (row.get("make"), row.get("model")) if part)
+
+
+def _moment_due(value, now):
+    if not value:
+        return True
+    text = str(value).replace("Z", "+00:00")
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return True
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment <= now
+
+
+def _schedule_next(sb, market_id, field, minutes):
+    moment = datetime.now(timezone.utc) + timedelta(minutes=max(minutes, 1))
+    try:
+        sb.table("seeker_market_controls").update({
+            field: moment.isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("market_id", market_id).execute()
+    except Exception:
+        return
+
+
+def _enqueue_recheck(sb, market_id):
+    try:
+        existing = (
+            sb.table("seeker_runs").select("id")
+            .eq("market_id", market_id).eq("job_kind", "recheck")
+            .in_("status", ["pending", "running"]).limit(1).execute()
+        )
+        if existing.data:
+            return
+        sb.table("seeker_runs").insert({
+            "search_query": f"Recheck\nMarket id: {market_id}",
+            "status": "pending",
+            "job_kind": "recheck",
+            "market_id": market_id,
+            "trigger": "schedule",
+            "requested_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
     except Exception:
-        return False
-    return True
+        return
 
 
 def claim_next_run(sb):
@@ -2830,6 +2947,7 @@ def run_market_discovery(sb, openai_client, seen, run):
         buyers + existing_buyers, sellers + existing_sellers, market_name,
     )
     verified = 0
+    still_valid = 0
     try:
         for buyer, seller in compared:
             if verified >= MATCH_TARGET:
@@ -2852,14 +2970,155 @@ def run_market_discovery(sb, openai_client, seen, run):
             if created:
                 verified += 1
                 mark_seen(seen, seller["url"], seller.get("title", ""))
+            elif _match_id:
+                still_valid += 1
     except ReservationClosed as exc:
         incomplete = exc.reason
-    summary = search_outcome([{"qualifying": True}] * verified, incomplete)
+    base = search_outcome([{"qualifying": True}] * verified, incomplete)
+    summary = base if not (verified or still_valid) else (
+        f"New matches: {verified}. Existing matches still valid: {still_valid}. "
+        f"No longer qualifying: 0. {base}"
+    )
     _finish_run(sb, run_id, summary)
     print(f"    Market discovery complete: {summary}")
 
 
 # --- Manual mode: handle website requests ---
+def _record_check(sb, market_id, run_id, url, kind, outcome, changes):
+    if not url:
+        return
+    try:
+        sb.table("seeker_check_history").insert({
+            "market_id": market_id,
+            "run_id": run_id,
+            "source_url": url,
+            "source_kind": kind,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "evidence": outcome,
+            "outcome": outcome,
+            "changes": changes or "",
+        }).execute()
+    except Exception:
+        return
+
+
+def _retire_matches(sb, seller_id):
+    """Keep the match row. It no longer counts as qualifying."""
+    if not seller_id:
+        return 0
+    try:
+        rows = (
+            sb.table("matches").select("id,match_decision,ai_reasoning")
+            .eq("seller_listing_id", seller_id).execute().data or []
+        )
+    except Exception:
+        return 0
+    retired = 0
+    for row in rows:
+        if row.get("match_decision") != "send":
+            continue
+        reason = "No longer qualifying. " + (row.get("ai_reasoning") or "")
+        try:
+            sb.table("matches").update({
+                "match_decision": "no_send",
+                "ai_reasoning": reason[:5000],
+            }).eq("id", row["id"]).execute()
+            retired += 1
+        except Exception:
+            continue
+    return retired
+
+
+def run_market_recheck(sb, openai_client, seen, run):
+    """Read saved finds again. An unreadable page stays unconfirmed."""
+    run_id = run["id"]
+    market_id = run.get("market_id") or ""
+    if not market_id:
+        _finish_run(sb, run_id, "Market recheck not connected yet")
+        return
+    try:
+        sellers = sb.table("seller_listings").select("*").eq("section_id", market_id).execute().data or []
+        buyers = sb.table("buyer_posts").select("*").eq("section_id", market_id).execute().data or []
+    except Exception as exc:
+        _finish_run(sb, run_id, search_outcome([], f"saved records could not be read — {exc}"))
+        return
+    still_valid = 0
+    invalidated = 0
+    for row in sellers:
+        url = row.get("source_url") or ""
+        fresh = refresh_stored_offer({
+            "url": url,
+            "title": row.get("username") or "",
+            "text": row.get("listing_text") or "",
+            "price": row.get("price"),
+            "shipping": row.get("shipping"),
+            "availability": row.get("availability"),
+            "stored": True,
+        }, read_listing_html)
+        readable = bool(fresh.get("text"))
+        outcome = fresh.get("availability") or "unconfirmed"
+        changes = []
+        if row.get("price") != fresh.get("price"):
+            changes.append(f"price {row.get('price')} -> {fresh.get('price')}")
+        if (row.get("availability") or "") != (fresh.get("availability") or ""):
+            changes.append(f"availability {row.get('availability')} -> {fresh.get('availability')}")
+        _record_check(sb, market_id, run_id, url, "seller", outcome, "; ".join(changes))
+        if not readable:
+            continue
+        record_offer_observation(sb, fresh)
+        linked = [buyer for buyer in buyers if buyer.get("post_text")]
+        meets = any(qualifies(fresh, buyer.get("post_text") or "") for buyer in linked) if linked else outcome == "available"
+        same = (
+            row.get("price") == fresh.get("price")
+            and row.get("shipping") == fresh.get("shipping")
+            and (row.get("availability") or "") == (fresh.get("availability") or "")
+        )
+        if outcome == "ended" or (linked and not meets):
+            invalidated += _retire_matches(sb, row.get("id"))
+            continue
+        if same or not linked:
+            still_valid += 1
+            continue
+        buyer = linked[0]
+        try:
+            result = ai_evaluate_match(
+                buyer.get("post_text") or "", fresh.get("text") or "", openai_client, sb, False,
+            )
+        except ReservationClosed:
+            break
+        if result and result.get("match") and result.get("confidence", 0) >= 60 and qualifies(fresh, buyer.get("post_text") or ""):
+            _match_id, created = push_match(sb, {
+                "title": buyer.get("username") or "buyer",
+                "text": buyer.get("post_text") or "",
+                "url": buyer.get("source_url"),
+                "platform": buyer.get("source_platform") or "web",
+            }, fresh, result, section_id=market_id)
+            if not created and _match_id:
+                still_valid += 1
+    closed_marks = ("withdrawn", "fulfilled", "no longer looking")
+    for buyer in buyers:
+        url = buyer.get("source_url") or ""
+        if not url.startswith("https://"):
+            continue
+        html = read_listing_html(url)
+        text = plain_page_text(html) if html else ""
+        stored = (buyer.get("post_text") or "").lower()
+        if not text:
+            _record_check(sb, market_id, run_id, url, "buyer", "unconfirmed", "page unreadable")
+            continue
+        closed = any(mark in text.lower() and mark not in stored for mark in closed_marks)
+        _record_check(
+            sb, market_id, run_id, url, "buyer",
+            "changed" if closed else "unchanged",
+            "request may be fulfilled or withdrawn" if closed else "",
+        )
+    summary = (
+        f"New matches: 0. Existing matches still valid: {still_valid}. "
+        f"No longer qualifying: {invalidated}. Checked {len(sellers)} saved offer(s)."
+    )
+    _finish_run(sb, run_id, summary)
+
+
 def check_manual_requests(sb, openai_client, seen):
     """Check Supabase for manual run requests from the website."""
     try:
@@ -2889,6 +3148,9 @@ def check_manual_requests(sb, openai_client, seen):
         query = (run.get("search_query") or "").strip()
 
         print(f"\n>>> MANUAL REQUEST: {run_id[:8]}...")
+        if str(run.get("job_kind") or "") == "recheck":
+            run_market_recheck(sb, openai_client, seen, run)
+            return True
         if is_market_discovery_run(run):
             run_market_discovery(sb, openai_client, seen, run)
             return True
@@ -3005,6 +3267,8 @@ def main():
     print("Connecting to OpenAI...")
     openai_client = OpenAI(api_key=OPENAI_KEY)
     print("Connected.")
+    print(f"  - Running code: {code_version()}")
+    recover_after_restart(sb)
 
     # Load seen items
     seen = load_seen()
@@ -3030,6 +3294,7 @@ def main():
     while True:
         try:
             write_heartbeat(sb)
+            enqueue_due_markets(sb)
             # Always check for manual requests first
             had_manual = check_manual_requests(sb, openai_client, seen)
 

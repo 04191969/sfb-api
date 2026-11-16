@@ -15,9 +15,14 @@ from sfb_api.api.seeker_markets import (
     category_for,
     WORKER_REVISION,
     classify_heartbeat,
+    crash_reservation_outcome,
     display_name,
     is_market_discovery,
+    market_control,
     market_detail,
+    match_group,
+    run_counts_text,
+    usage_report,
     market_scope,
     present_run,
 )
@@ -120,3 +125,67 @@ class DiscoveryControlTests(unittest.TestCase):
         self.assertTrue(running["animate"])
         done = present_run({"status": "completed", "result_summary": "Search incomplete — the page budget was used before every candidate was opened"})
         self.assertIn("Search incomplete", done["label"])
+
+
+class MonitoringTests(unittest.TestCase):
+    def test_markets_start_paused(self):
+        control = market_control(None)
+        self.assertFalse(control["enabled"])
+        self.assertTrue(control["paused"])
+        self.assertEqual(control["discovery_interval_minutes"], 30)
+        self.assertEqual(control["recheck_interval_hours"], 6)
+        self.assertEqual(control["next_search"], "Paused")
+        assembled = assemble_markets(
+            [{"id": "market-1", "name": "Epiphone USA Map", "make": "Epiphone", "model": "USA Map"}],
+            [], [], [], [], NOW,
+            worker={"status": "online", "message": "Worker online", "revision": WORKER_REVISION},
+            discovery_ready=True,
+        )
+        self.assertEqual(assembled["markets"][0]["next_search"], "Paused")
+        self.assertFalse(assembled["markets"][0]["automatic"]["enabled"])
+
+    def test_run_counts_keep_an_incomplete_reason(self):
+        self.assertEqual(
+            run_counts_text(incomplete="AI reservation timed out"),
+            "Search incomplete — AI reservation timed out",
+        )
+        text = run_counts_text(2, 1, 0, base="Found 2 qualifying match(es)")
+        self.assertIn("New matches: 2", text)
+        self.assertIn("Existing matches still valid: 1", text)
+        self.assertIn("qualifying match", text)
+
+    def test_cross_posts_are_not_independent_matches(self):
+        self.assertEqual(match_group({"match_decision": "send", "ai_reasoning": "Possible cross-post."}), "cross_post")
+        self.assertEqual(match_group({"match_decision": "send", "status": "pending_review"}), "qualifying")
+        self.assertEqual(match_group({"match_decision": "no_send", "status": "flagged"}), "inactive")
+        self.assertEqual(match_group({"match_decision": "send", "ai_reasoning": "Introduction: on hold"}), "held")
+
+    def test_a_crash_does_not_fail_or_retry_the_call(self):
+        self.assertEqual(crash_reservation_outcome(), "uncertain")
+        report = usage_report(
+            {"succeeded": 4, "failed": 1},
+            [{"state": "uncertain"}, {"state": "reserved"}],
+        )
+        self.assertEqual(report["uncertain"], 1)
+        self.assertEqual(report["failed"], 1)
+        self.assertEqual(report["open"], 1)
+        self.assertTrue(report["cost_is_estimate"])
+
+    def test_listed_for_sale_is_shown_as_an_open_offer(self):
+        assembled = assemble_markets(
+            [{"id": "market-1", "name": "Barudan", "make": "Barudan", "model": "902T"}],
+            [{"id": "m1", "section_id": "market-1", "seller_listing_id": "s1", "match_decision": "send", "ai_reasoning": "ok", "created_at": "2026-11-16T14:00:00+00:00"}],
+            [],
+            [{"id": "s1", "listing_text": "Listed for sale—checked 2026-11-16 21:04 UTC\nBarudan"}],
+            [],
+            NOW,
+        )
+        self.assertEqual(assembled["markets"][0]["verified_available_offers"], 1)
+
+    def test_heartbeat_carries_the_code_version(self):
+        fresh = classify_heartbeat(
+            [{"seen_at": "2026-11-16T14:59:40+00:00", "revision": WORKER_REVISION, "detail": "manual; code f972a58"}],
+            NOW,
+        )
+        self.assertEqual(fresh["code_version"], "f972a58")
+        self.assertEqual(fresh["revision"], WORKER_REVISION)

@@ -8,14 +8,18 @@ from rest_framework.response import Response
 
 from .matcher import analyze_match
 from .seeker_markets import (
+    DEFAULT_DISCOVERY_MINUTES,
+    DEFAULT_RECHECK_HOURS,
     DISCOVERY_UNAVAILABLE,
     WORKER_REVISION,
     assemble_markets,
     classify_heartbeat,
     is_market_discovery,
+    market_control,
     market_detail,
     market_scope,
     present_run,
+    usage_report,
 )
 from .supabase_client import get_supabase
 
@@ -160,7 +164,7 @@ def _worker_report(sb):
     try:
         rows = (
             sb.table("seeker_worker_heartbeat")
-            .select("worker_id,seen_at,revision")
+            .select("worker_id,seen_at,revision,detail")
             .execute()
             .data
             or []
@@ -168,6 +172,97 @@ def _worker_report(sb):
     except Exception:
         return classify_heartbeat([])
     return classify_heartbeat(rows)
+
+
+def _market_controls(sb):
+    try:
+        return sb.table("seeker_market_controls").select("*").execute().data or []
+    except Exception:
+        return []
+
+
+@api_view(["GET", "POST"])
+def seeker_market_control(request, market_id):
+    """Pause or enable one market. A missing row stays paused."""
+    try:
+        sb = get_supabase()
+        detail = market_detail(
+            market_id, *_seeker_rows(sb),
+            worker=_worker_report(sb),
+            discovery_ready=_discovery_ready(sb),
+        )
+    except Exception as e:
+        return _server_error(e)
+    if detail is None:
+        return Response({"error": "Market not found"}, status=status.HTTP_404_NOT_FOUND)
+    market = detail["market"]["id"]
+    if request.method == "GET":
+        current = next((row for row in _market_controls(sb) if row.get("market_id") == market), None)
+        return Response({"market_id": market, **market_control(current)})
+    enabled = bool(request.data.get("enabled"))
+    try:
+        minutes = int(request.data.get("discovery_interval_minutes") or DEFAULT_DISCOVERY_MINUTES)
+        hours = int(request.data.get("recheck_interval_hours") or DEFAULT_RECHECK_HOURS)
+    except (TypeError, ValueError):
+        return Response({"error": "Intervals must be numbers."}, status=status.HTTP_400_BAD_REQUEST)
+    if minutes < 5 or hours < 1:
+        return Response({"error": "Intervals are too short."}, status=status.HTTP_400_BAD_REQUEST)
+    row = {
+        "market_id": market,
+        "enabled": enabled,
+        "discovery_interval_minutes": minutes,
+        "recheck_interval_hours": hours,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        sb.table("seeker_market_controls").upsert(row).execute()
+    except Exception as exc:
+        text = str(exc).lower()
+        if "seeker_market_controls" in text or "pgrst" in text or "could not find" in text:
+            return Response(
+                {"automatic": market_control(None), "message": "Market controls are not installed yet."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return _server_error(exc)
+    return Response({"market_id": market, **market_control(row)})
+
+
+@api_view(["GET"])
+def seeker_runs(request):
+    """Recent discovery and consumer runs, including incomplete reasons."""
+    try:
+        sb = get_supabase()
+        rows = (
+            sb.table("seeker_runs")
+            .select("*")
+            .order("requested_at", desc=True)
+            .limit(50)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        return _server_error(e)
+    return Response({"runs": [present_run(row) for row in rows]})
+
+
+@api_view(["GET"])
+def seeker_usage(request):
+    """Today's model calls. An uncertain call is held for reconciliation."""
+    try:
+        sb = get_supabase()
+        today = datetime.now(timezone.utc).date().isoformat()
+        usage_rows = (
+            sb.table("seeker_ai_usage").select("*").eq("usage_date", today).limit(1).execute().data or []
+        )
+        reservations = (
+            sb.table("seeker_ai_reservations").select("state").eq("usage_date", today).execute().data or []
+        )
+    except Exception as e:
+        return _server_error(e)
+    report = usage_report(usage_rows[0] if usage_rows else {}, reservations)
+    report["usage_date"] = today
+    return Response(report)
 
 
 # ── Sections ──
@@ -193,6 +288,7 @@ def seeker_markets(request):
             *_seeker_rows(sb),
             worker=_worker_report(sb),
             discovery_ready=_discovery_ready(sb),
+            controls=_market_controls(sb),
         )
     except Exception as e:
         return _server_error(e)

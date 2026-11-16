@@ -87,13 +87,88 @@ def _parse_time(value):
 
 def _offer_state(listing_text):
     first = str(listing_text or "").split("\n", 1)[0].strip().casefold()
-    if first.startswith("found for sale"):
+    if first.startswith("found for sale") or first.startswith("listed for sale"):
         return "available"
     if first.startswith("listing ended"):
         return "ended"
     if first.startswith("availability unconfirmed"):
         return "unconfirmed"
     return "unknown"
+
+
+DEFAULT_DISCOVERY_MINUTES = 30
+DEFAULT_RECHECK_HOURS = 6
+# A published gpt-4o-mini call of this size is well under a cent. The figure is an estimate.
+AI_CALL_ESTIMATE_USD = 0.001
+
+
+def market_control(row=None):
+    """A market with no control row is paused. Nothing starts automatically."""
+    row = row or {}
+    enabled = bool(row.get("enabled"))
+    return {
+        "enabled": enabled,
+        "paused": not enabled,
+        "discovery_interval_minutes": int(row.get("discovery_interval_minutes") or DEFAULT_DISCOVERY_MINUTES),
+        "recheck_interval_hours": int(row.get("recheck_interval_hours") or DEFAULT_RECHECK_HOURS),
+        "next_discovery_at": row.get("next_discovery_at"),
+        "next_recheck_at": row.get("next_recheck_at"),
+        "next_search": row.get("next_discovery_at") if enabled else "Paused",
+    }
+
+
+def run_counts_text(new_matches=0, still_valid=0, no_longer_qualifying=0, incomplete="", base=""):
+    """Name the three results. A pure incomplete reason stays unchanged."""
+    if not (new_matches or still_valid or no_longer_qualifying):
+        return base or (f"Search incomplete — {incomplete}" if incomplete else "No qualifying match found in the sources checked")
+    text = (
+        f"New matches: {new_matches}. "
+        f"Existing matches still valid: {still_valid}. "
+        f"No longer qualifying: {no_longer_qualifying}."
+    )
+    if base:
+        text = f"{text} {base}"
+    if incomplete:
+        text = f"{text} Search incomplete — {incomplete}"
+    return text
+
+
+def match_group(match):
+    """Dashboard group. An unresolved cross-post is not an independent item."""
+    if _is_cross_post((match or {}).get("ai_reasoning")):
+        return "cross_post"
+    decision = (match or {}).get("match_decision")
+    status = str((match or {}).get("status") or "").casefold()
+    reason = str((match or {}).get("ai_reasoning") or "").casefold()
+    if decision == "no_send" or status in ("flagged", "rejected"):
+        return "inactive"
+    if "on hold" in reason or status == "held":
+        return "held"
+    if decision == "send":
+        return "qualifying"
+    return "held"
+
+
+def usage_report(usage_row, reservations, estimate_usd=AI_CALL_ESTIMATE_USD):
+    """Calls and an estimate. An uncertain call is neither a success nor a failure."""
+    usage_row = usage_row or {}
+    succeeded = int(usage_row.get("succeeded") or 0)
+    failed = int(usage_row.get("failed") or 0)
+    uncertain = sum(1 for row in reservations or [] if row.get("state") == "uncertain")
+    open_calls = sum(1 for row in reservations or [] if row.get("state") == "reserved")
+    return {
+        "succeeded": succeeded,
+        "failed": failed,
+        "uncertain": uncertain,
+        "open": open_calls,
+        "estimated_cost_usd": round(succeeded * estimate_usd, 4),
+        "cost_is_estimate": True,
+    }
+
+
+def crash_reservation_outcome():
+    """A dead worker does not prove the model call failed, and it is not sent again."""
+    return "uncertain"
 
 
 def _is_cross_post(text):
@@ -110,7 +185,7 @@ def _buyer_origin(buyer):
     return NOT_AVAILABLE
 
 
-def assemble_markets(sections, matches, buyers, sellers, runs, now=None, worker=None, discovery_ready=False):
+def assemble_markets(sections, matches, buyers, sellers, runs, now=None, worker=None, discovery_ready=False, controls=None):
     """One card per confirmed market. Ambiguous names stay in review."""
     now = now or datetime.now(timezone.utc)
     week_start = now - timedelta(days=7)
@@ -213,10 +288,14 @@ def assemble_markets(sections, matches, buyers, sellers, runs, now=None, worker=
             return NOT_AVAILABLE, NOT_AVAILABLE
         return newest.isoformat(), summary or NOT_AVAILABLE
 
+    control_by_market = {
+        row.get("market_id"): row for row in controls or [] if row.get("market_id")
+    }
     cards = []
     for market in markets:
         run_at, summary = last_run(market)
         verified = len(available[market["id"]])
+        control = market_control(control_by_market.get(market["id"]))
         cards.append({
             "id": market["id"],
             "slug": market["slug"],
@@ -230,6 +309,9 @@ def assemble_markets(sections, matches, buyers, sellers, runs, now=None, worker=
             "qualifying_matches_7d": len(qualifying[market["id"]]),
             "last_discovery_run": run_at,
             "last_result_summary": summary,
+            "last_check": run_at,
+            "next_search": control["next_search"],
+            "automatic": control,
             "watching": NOT_AVAILABLE,
         })
     reported_worker = worker or {"status": "unknown", "message": WORKER_UNKNOWN, "revision": ""}
@@ -303,6 +385,7 @@ def market_detail(market_id, sections, matches, buyers, sellers, runs, now=None,
             "decision": match.get("match_decision") or NOT_AVAILABLE,
             "status": match.get("status") or NOT_AVAILABLE,
             "possible_cross_post": cross,
+            "group": match_group(match),
             "counts_as_qualifying": (
                 match.get("match_decision") == "send" and not cross
             ),
@@ -335,8 +418,18 @@ def classify_heartbeat(rows, now=None):
             newest = seen
             newest_row = row
     revision = str((newest_row or {}).get("revision") or "")
+    detail = str((newest_row or {}).get("detail") or "")
+    code_version = str((newest_row or {}).get("code_version") or "")
+    if not code_version and "code " in detail:
+        code_version = detail.split("code ", 1)[1].split(";", 1)[0].strip()
     if newest is None:
-        return {"status": "unknown", "message": WORKER_UNKNOWN, "seen_at": None, "revision": revision}
+        return {
+            "status": "unknown",
+            "message": WORKER_UNKNOWN,
+            "seen_at": None,
+            "revision": revision,
+            "code_version": code_version,
+        }
     age = now - newest
     if age <= HEARTBEAT_FRESH:
         status_name, message = "online", "Worker online"
@@ -347,6 +440,7 @@ def classify_heartbeat(rows, now=None):
         "message": message,
         "seen_at": newest.isoformat(),
         "revision": revision,
+        "code_version": code_version,
     }
 
 

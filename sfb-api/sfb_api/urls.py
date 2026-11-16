@@ -48,7 +48,10 @@ urlpatterns = [
 
     # Seeker
     path('api/seeker/markets/', views.seeker_markets, name='seeker-markets'),
+    path('api/seeker/markets/<str:market_id>/control/', views.seeker_market_control, name='seeker-market-control'),
     path('api/seeker/markets/<str:market_id>/discover/', views.seeker_market_discover, name='seeker-market-discover'),
+    path('api/seeker/usage/', views.seeker_usage, name='seeker-usage'),
+    path('api/seeker/runs/', views.seeker_runs, name='seeker-runs'),
     path('api/seeker/markets/<str:market_id>/', views.seeker_market_detail, name='seeker-market-detail'),
     path('api/seeker/status/', views.seeker_status, name='seeker-status'),
     path('api/seeker/run/', views.seeker_run, name='seeker-run'),
