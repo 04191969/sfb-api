@@ -30,6 +30,52 @@ class CurrencyTests(unittest.TestCase):
         self.assertIsNone(offer_currency(self.html() + self.html(currency='CAD'), URL, 900, self.scope))
         self.assertIsNone(offer_currency('Price $900; United States', URL, 900, self.scope))
 
+    def craigslist(self, currency='USD', **changes):
+        url = 'https://www.craigslist.org/view/d/arlington-bike/abc123'
+        name = 'LL Bean Sport Cruiser 7 Bicycle'
+        description = 'Hunter Green bicycle, great condition, couple scratches.'
+        product = {'@type': 'Product', 'name': name, 'description': description,
+                   'offers': {'price': '135.00', 'priceCurrency': currency}}
+        product.update(changes)
+        crumbs = {'@type': 'BreadcrumbList', 'itemListElement': [
+            {'name': 'for sale', 'item': '/search?cat=sss'},
+            {'name': 'bicycles - by owner', 'item': '/search?cat=bia'},
+            {'name': name, 'item': url}]}
+        html = (f'<html><head><link rel="canonical" href="{url}"></head><body>'
+                f'<h1 id="titletextonly">{name}</h1><span class="price">$135</span>'
+                f'<section id="postingbody">QR Code Link to This Post {description}</section>'
+                '<script type="application/ld+json">' + json.dumps(crumbs) + '</script>'
+                '<script type="application/ld+json">' + json.dumps(product) + '</script></body></html>')
+        return url, html
+
+    def test_craigslist_missing_offer_url_uses_own_ad_identity(self):
+        from live_matches_discovery import install as discovery
+        url, html = self.craigslist()
+        discovery(self.scope)
+        install(self.scope)
+        result = self.scope['inspect_listing_html'](html, 'LL Bean Sport Cruiser 7 Bicycle', url)
+        self.assertEqual(result['status'], 'available')
+        self.assertEqual(result['price'], 135)
+        self.assertIsNone(result['shipping'])
+        self.assertIn('priceCurrency USD', result['text'])
+        self.assertIn('item URL ' + url, result['text'])
+
+    def test_craigslist_binding_rejects_ambiguous_or_other_product(self):
+        url, good = self.craigslist()
+        variants = [self.craigslist(name='Different bike')[1],
+                    self.craigslist(description='Different description')[1],
+                    good.replace('rel="canonical"', 'rel="other"'),
+                    good.replace('bicycles - by owner', 'wanted - by owner'),
+                    good + '<script type="application/ld+json">{"@type":"Product","name":"Related bike"}</script>',
+                    self.craigslist(url='https://www.craigslist.org/view/d/other/xyz')[1],
+                    self.craigslist(currency=None)[1]]
+        for html in variants:
+            self.assertIsNone(offer_currency(html, url, 135, self.scope))
+        self.assertIsNone(offer_currency(good, url, 136, self.scope))
+        self.assertIsNone(offer_currency(good, 'https://example.com/view/d/arlington-bike/abc123', 135, self.scope))
+        self.assertIsNone(offer_currency(self.html(url=None), URL, 900, self.scope))
+
+
 
 class CurrencySummaryTests(unittest.TestCase):
     def test_product_match_currency_hold_in_run_summary(self):
