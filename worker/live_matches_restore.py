@@ -25,6 +25,8 @@ def run_claimed(sb, client, seen, run):
         raise ValueError("Market discovery must stay on its existing path")
     # Supply the already-claimed run; never claim or requeue another job here.
     baseline["claim_next_run"] = lambda _sb: run
+    from live_matches_discovery import install as install_discovery
+    install_discovery(baseline)
     from live_matches_v2.adapter import install
     install(baseline)
     print("    Live Matches search baseline: f972a58; assessment: V2 (gpt-5.4-2026-03-05)")
