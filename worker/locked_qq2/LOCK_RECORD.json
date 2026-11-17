@@ -1,0 +1,13 @@
+{
+  "title": "SFB Seeker \u2014 Locked Matcher QQ2",
+  "status": "owner_approved_locked",
+  "date": "2026-11-11",
+  "matcher_prompt_sha256": "4de1e2c3184900548bfde0d26b1beb7350f7c0dbc060c83e34ee38135195a8d6",
+  "previous_baseline_preserved": true,
+  "seeker_v091_modified": false,
+  "integrated_into_seeker": false,
+  "new_paid_calls": 0,
+  "approval": "lock it and title it as locked and send it to me",
+  "title_request": "also add seeker to tiltle",
+  "evidence": "verification/paid_run/PAID_RESULTS/REPORT.json"
+}

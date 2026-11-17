@@ -1789,59 +1789,43 @@ def extract_shipping(text):
 
 
 # --- AI Matching ---
+def _qq2_adapter():
+    # Resolve beside this worker, including when tests execute its source directly.
+    import importlib.util
+    path = Path(ai_evaluate_match.__code__.co_filename).resolve().parent / "qq2_adapter.py"
+    spec = importlib.util.spec_from_file_location("sfb_qq2_adapter", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def matcher_accepts(result):
+    if not result:
+        return False
+    if result.get("matcher") == "locked-qq2":
+        return result.get("decision") == "Send" and result.get("match") is True
+    return bool(result.get("match") and (result.get("confidence") or 0) >= 60)
+
+
 def ai_evaluate_match(buyer_text, seller_text, client, sb=None, allow_file_counter=True):
-    """Use OpenAI to evaluate if a buyer post matches a seller listing."""
+    """Execute the locked QQ2 payload and validator; no replacement prompt or retry."""
+    adapter = _qq2_adapter()
+    locked, data, payload = adapter.prepare(buyer_text, seller_text)
     reservation_kind, reservation_id = _reserve_ai(sb, allow_file_counter)
-    prompt = f"""You are a matching engine for a marketplace. Your job is to determine if a seller's listing could fulfill what a buyer is looking for.
-
-BUYER'S WANT-TO-BUY POST:
-{buyer_text[:1500]}
-
-SELLER'S LISTING:
-{seller_text[:1500]}
-
-RULES:
-- match=true ONLY if the seller listing is a SPECIFIC ITEM (not a category page) that could fulfill the buyer's request
-- match=false if the seller listing is a generic eBay category/browse page (titles like "25+ items for sale", "items for sale | Updated", or just a category name)
-- match=false if the items are in different categories (e.g. buyer wants Pokemon cards but seller has Bitcoin cards)
-- match=false if you can't tell what specific item the seller is offering
-- confidence 100: the listing states the same brand AND the same model the buyer named. Do not pick 80 as a default for that case.
-- confidence 60-79: same type of item, but the specific model is not the one named
-- confidence below 60: weak, vague, or no match — set match=false
-- Do not lower the score because availability, shipping, or location is unknown. Those are separate from the product match.
-
-Respond in this exact JSON format:
-{{
-    "match": true or false,
-    "confidence": 0-100,
-    "reason": "one sentence explaining why this is or isn't a match",
-    "make": "brand name if identifiable",
-    "model": "model name/number if identifiable",
-    "part": "type of item (speaker, camera, guitar, etc.)"
-}}"""
-
+    completed = False
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=300,
-        )
+        response = client.with_options(max_retries=0).responses.create(**payload)
+        completed = True
         if reservation_kind == "db":
             _settle_ai(sb, reservation_id, "succeeded")
-            print("    OpenAI call reserved and settled.")
         else:
-            used = record_ai_call()
-            print(f"    OpenAI calls today: {used}")
-        text = response.choices[0].message.content.strip()
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group())
-    except Exception as e:
-        if reservation_kind == "db":
+            record_ai_call()
+        return adapter.accept(locked, data, response)
+    except Exception as exc:
+        if reservation_kind == "db" and not completed:
             _settle_ai(sb, reservation_id, "failed")
-        print(f"    AI error: {e}")
-    return None
+        print(f"    Locked QQ2 error: {exc}")
+        return None
 
 
 def money(amount):
@@ -1971,10 +1955,10 @@ def search_outcome(listings, incomplete=""):
     return "No qualifying match found in the sources checked"
 
 
-def assessment_text(availability, confidence, product_reason, location, item_price=None, buyer_text="", shipping=None, evidence="", checked_at=""):
+def assessment_text(availability, confidence, product_reason, location, item_price=None, buyer_text="", shipping=None, evidence="", checked_at="", matcher_decision=None):
     """A product match cannot override a failed price limit."""
     price = price_against_budget(item_price, buyer_price_cap(buyer_text), shipping)
-    product_ok = availability == "available" and confidence >= 60
+    product_ok = availability == "available" and (matcher_decision == "Send" if matcher_decision is not None else confidence >= 60)
     send = product_ok and price["status"] in ("no_cap", "within")
     decision = "send" if send else "no_send"
     if price["status"] == "over" and price["negotiable"]:
@@ -2062,9 +2046,9 @@ def find_market_section(sb, make, model, part):
 def push_match(sb, buyer, seller, match_result, section_id=None):
     """Push a buyer-seller match to Supabase."""
     try:
-        make = match_result.get("make", "")
-        model = match_result.get("model", "")
-        part = match_result.get("part", "")
+        make = match_result.get("make") or buyer.get("make") or seller.get("make") or ""
+        model = match_result.get("model") or buyer.get("model") or seller.get("model") or ""
+        part = match_result.get("part") or buyer.get("part") or seller.get("part") or ""
         confidence = match_result.get("confidence", 50)
         reason = match_result.get("reason", "")
         availability = seller.get("availability") or "unconfirmed"
@@ -2080,7 +2064,11 @@ def push_match(sb, buyer, seller, match_result, section_id=None):
             availability, confidence, reason, place,
             seller.get("price"), buyer.get("text") or "", seller.get("shipping"),
             seller.get("availability_evidence") or "", seller.get("checked_at") or "",
+            matcher_decision=match_result.get("decision") if match_result.get("matcher") == "locked-qq2" else None,
         )
+        if match_result.get("matcher") == "locked-qq2":
+            reason += "\nLocked QQ2 assessment: " + json.dumps(match_result["assessment"], ensure_ascii=False)
+            reason += "\nValidated disclosure: " + json.dumps(match_result["validated"], ensure_ascii=False)
         if cross:
             reason = f"{reason} | Note: {cross}"
 
@@ -2108,6 +2096,10 @@ def push_match(sb, buyer, seller, match_result, section_id=None):
         if existing.data:
             buyer_id = existing.data[0]["id"]
             changes = dict(buyer_row)
+            if match_result.get("matcher") == "locked-qq2":
+                for key in ("make", "model", "part"):
+                    if not changes.get(key):
+                        changes.pop(key, None)
             buyer_platform = str(buyer.get("platform") or "").casefold()
             buyer_url = str(buyer.get("url") or "").casefold()
             # A later snippet must not replace the public author's stored wording.
@@ -2130,11 +2122,30 @@ def push_match(sb, buyer, seller, match_result, section_id=None):
         }
         if existing.data:
             seller_id = existing.data[0]["id"]
+            if match_result.get("matcher") == "locked-qq2":
+                seller_row = {k: v for k, v in seller_row.items() if k not in ("make", "model", "part") or v}
             sb.table("seller_listings").update(seller_row).eq("id", seller_id).execute()
         else:
             seller_id = sb.table("seller_listings").insert(seller_row).execute().data[0]["id"]
 
-        # File this result into the confirmed market. Old section rows stay in place.
+        # QQ2 has no taxonomy fields. Preserve an existing market rather than
+        # inventing brand/model values or filing every decision under General.
+        if not section_id and match_result.get("matcher") == "locked-qq2":
+            section_id = buyer.get("section_id") or seller.get("section_id")
+            if not section_id:
+                label = requested_item(buyer.get("title") or buyer.get("text") or "")
+                key = market_label(make, model, label)[2]
+                markets = sb.table("sections").select("id,name,make,model").execute().data or []
+                for market in markets:
+                    if key == market_label(market.get("make"), market.get("model"), market.get("name"))[2]:
+                        section_id = market["id"]
+                        make, model = market.get("make") or "", market.get("model") or ""
+                        break
+                if not section_id:
+                    section_id = sb.table("sections").insert({
+                        "name": label or "Unclassified request", "make": make, "model": model,
+                        "match_count": 1, "last_match_at": observed,
+                    }).execute().data[0]["id"]
         if not section_id:
             section_id, make, model = find_market_section(sb, make, model, part)
 
@@ -2217,7 +2228,7 @@ def auto_search(sb, openai_client, seen, search_index, shuffled_plan):
             confidence = result.get("confidence", 0)
             print(f"    AI says: match={is_match}, confidence={confidence}%")
 
-            if is_match and confidence >= 60 and qualifies(seller, buyer["text"]):
+            if matcher_accepts(result) and qualifies(seller, buyer["text"]):
                 match_id, _created = push_match(sb, buyer, seller, result)
                 if match_id:
                     matches_found += 1
@@ -3072,7 +3083,7 @@ def discover_public_market(sb, client, seen, market, report=None):
         except ReservationClosed as exc:
             report["incomplete"].append(exc.reason)
             break
-        if not (result and result.get("match") and result.get("confidence", 0) >= 60):
+        if not (matcher_accepts(result)):
             report["rejected"] += 1
             continue
         if not qualifies(seller, buyer.get("text") or ""):
@@ -3211,7 +3222,7 @@ def run_market_discovery(sb, openai_client, seen, run):
             result = ai_evaluate_match(
                 buyer.get("text") or "", seller.get("text") or "", openai_client, sb, False,
             )
-            if not (result and result.get("match") and result.get("confidence", 0) >= 60):
+            if not (matcher_accepts(result)):
                 continue
             if not qualifies(seller, buyer.get("text") or ""):
                 continue
@@ -3335,7 +3346,7 @@ def run_market_recheck(sb, openai_client, seen, run):
             )
         except ReservationClosed:
             break
-        if result and result.get("match") and result.get("confidence", 0) >= 60 and qualifies(fresh, buyer.get("post_text") or ""):
+        if matcher_accepts(result) and qualifies(fresh, buyer.get("post_text") or ""):
             _match_id, created = push_match(sb, {
                 "title": buyer.get("username") or "buyer",
                 "text": buyer.get("post_text") or "",
@@ -3453,7 +3464,7 @@ def check_manual_requests(sb, openai_client, seen):
                         incomplete = exc.reason
                         print(f"    {exc.reason}")
                         break
-                    if not (result_ai and result_ai.get("match") and result_ai.get("confidence", 0) >= 60):
+                    if not (matcher_accepts(result_ai)):
                         print(f"    Not a qualifying product: {seller['title'][:70]}")
                         continue
                     if not qualifies(seller, buyer["text"]):

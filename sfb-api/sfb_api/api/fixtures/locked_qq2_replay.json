@@ -1,0 +1,1717 @@
+[
+  {
+    "id": "P01",
+    "input": {
+      "buyer_text": "WTB: Two Polk RT35i speakers\nHello, I am looking for two RT35i speakers. Thank you!",
+      "seller_text": "Polk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way\nSeller description:\nPolk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way. Condition is Used. Shipped with Economy Shipping.\nCondition: Used\nPrice: 159.99 USD\nCompatible Brand: Universal\nDriver Size: 6.5 in\nSystem Configuration: 2.0 Channel\nShape: Rectangular\nColor: Black\nCompatible Model: Universal\nMaterial: Wood\nSmart Home Compatibility: None\nBrand: Polk Audio\nType: Bookshelf Speakers\nUnit Type: Unit\nModel: Polk Audio RT35i\nConnectivity: Wired\nFeatures: Compact, Design, High End, Mini, Small\nRMS Power: 100 W\nUnit Quantity: 1\nImpedance: 8 Ohms\nCountry of Origin: China\nestimatedAvailabilities: [{\"deliveryOptions\": [\"SHIP_TO_HOME\", \"SELLER_ARRANGED_LOCAL_PICKUP\"], \"estimatedAvailabilityStatus\": \"IN_STOCK\", \"estimatedAvailableQuantity\": 1, \"estimatedSoldQuantity\": 0, \"estimatedRemainingQuantity\": 1}]\nitemLocation: {\"city\": \"Greenville\", \"stateOrProvince\": \"South Carolina\", \"postalCode\": \"296**\", \"country\": \"US\"}\nshippingOptions: [{\"shippingServiceCode\": \"Economy Shipping\", \"type\": \"Economy Shipping\", \"shippingCost\": {\"value\": \"75.00\", \"currency\": \"USD\"}, \"quantityUsedForEstimate\": 1, \"minEstimatedDeliveryDate\": \"2026-11-14T10:00:00.000Z\", \"maxEstimatedDeliveryDate\": \"2026-11-20T10:00:00.000Z\", \"additionalShippingCostPerUnit\": {\"value\": \"45.00\", \"currency\": \"USD\"}, \"shippingCostType\": \"FIXED\"}]\nbuyingOptions: [\"FIXED_PRICE\"]"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants two Polk RT35i speakers. The seller offers a Polk Audio RT35i Bookshelf Speakers listing that is contextually interpreted as one two-speaker 2.0 set, not a single speaker, because the listing names Bookshelf Speakers in plural and states 2.0 Channel with no explicit single-speaker limitation. It is available used at a fixed price with shipping or local pickup, and there is no buyer-stated conflict.",
+      "requested_purchase": "Two Polk RT35i speakers",
+      "offered_purchase": "Polk Audio RT35i Bookshelf Speakers listing, contextually interpreted as one two-speaker 2.0 set; used; $159.99 plus $75.00 Economy Shipping; ship to home or local pickup",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "WTB: Two Polk RT35i speakers",
+          "supports": "Buyer requests two Polk RT35i speakers."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "I am looking for two RT35i speakers.",
+          "supports": "Buyer reiterates the wanted quantity and model."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way",
+          "supports": "Seller's item identity; plural speaker listing for Polk Audio RT35i."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Condition: Used",
+          "supports": "Seller states the condition is used."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Price: 159.99 USD",
+          "supports": "Seller's fixed item price."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "System Configuration: 2.0 Channel",
+          "supports": "Supports contextual interpretation that the sale unit is a two-speaker stereo set."
+        },
+        {
+          "id": "s5",
+          "source": "seller",
+          "quote": "Unit Quantity: 1",
+          "supports": "Shows one sale unit/listing; with the plural title and 2.0 configuration, this does not by itself limit the offer to one speaker."
+        },
+        {
+          "id": "s6",
+          "source": "seller",
+          "quote": "estimatedAvailabilities: [{\"deliveryOptions\": [\"SHIP_TO_HOME\", \"SELLER_ARRANGED_LOCAL_PICKUP\"], \"estimatedAvailabilityStatus\": \"IN_STOCK\", \"estimatedAvailableQuantity\": 1, \"estimatedSoldQuantity\": 0, \"estimatedRemainingQuantity\": 1}]",
+          "supports": "Seller indicates the listing is in stock and offers ship-to-home or seller-arranged local pickup."
+        },
+        {
+          "id": "s7",
+          "source": "seller",
+          "quote": "shippingOptions: [{\"shippingServiceCode\": \"Economy Shipping\", \"type\": \"Economy Shipping\", \"shippingCost\": {\"value\": \"75.00\", \"currency\": \"USD\"}, \"quantityUsedForEstimate\": 1, \"minEstimatedDeliveryDate\": \"2026-11-14T10:00:00.000Z\", \"maxEstimatedDeliveryDate\": \"2026-11-20T10:00:00.000Z\", \"additionalShippingCostPerUnit\": {\"value\": \"45.00\", \"currency\": \"USD\"}, \"shippingCostType\": \"FIXED\"}]",
+          "supports": "Seller states the shipping method and fixed shipping charge."
+        },
+        {
+          "id": "s8",
+          "source": "seller",
+          "quote": "buyingOptions: [\"FIXED_PRICE\"]",
+          "supports": "Seller offers the item as a fixed-price purchase."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "Per the provided clarification, this listing is treated as one two-speaker set because it is titled in plural as Bookshelf Speakers and states System Configuration: 2.0 Channel, with no explicit single-speaker limitation."
+      ]
+    }
+  },
+  {
+    "id": "P02",
+    "input": {
+      "buyer_text": "WTB: Two Polk RT35i speakers\nHello, I am looking for two RT35i speakers. Thank you!",
+      "seller_text": "Polk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way\nSeller description:\nPolk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way. Condition is Used. Shipped with Economy Shipping.\nCondition: Used\nPrice: 159.99 USD\nCompatible Brand: Universal\nDriver Size: 6.5 in\nSystem Configuration: 2.0 Channel\nShape: Rectangular\nColor: Black\nCompatible Model: Universal\nMaterial: Wood\nSmart Home Compatibility: None\nBrand: Polk Audio\nType: Bookshelf Speakers\nUnit Type: Unit\nModel: Polk Audio RT35i\nConnectivity: Wired\nFeatures: Compact, Design, High End, Mini, Small\nRMS Power: 100 W\nUnit Quantity: 1\nImpedance: 8 Ohms\nCountry of Origin: China\nestimatedAvailabilities: [{\"deliveryOptions\": [\"SHIP_TO_HOME\", \"SELLER_ARRANGED_LOCAL_PICKUP\"], \"estimatedAvailabilityStatus\": \"IN_STOCK\", \"estimatedAvailableQuantity\": 1, \"estimatedSoldQuantity\": 0, \"estimatedRemainingQuantity\": 1}]\nitemLocation: {\"city\": \"Greenville\", \"stateOrProvince\": \"South Carolina\", \"postalCode\": \"296**\", \"country\": \"US\"}\nshippingOptions: [{\"shippingServiceCode\": \"Economy Shipping\", \"type\": \"Economy Shipping\", \"shippingCost\": {\"value\": \"75.00\", \"currency\": \"USD\"}, \"quantityUsedForEstimate\": 1, \"minEstimatedDeliveryDate\": \"2026-11-14T10:00:00.000Z\", \"maxEstimatedDeliveryDate\": \"2026-11-20T10:00:00.000Z\", \"additionalShippingCostPerUnit\": {\"value\": \"45.00\", \"currency\": \"USD\"}, \"shippingCostType\": \"FIXED\"}]\nbuyingOptions: [\"FIXED_PRICE\"]"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants two Polk RT35i speakers. This listing offers one saleable Polk Audio RT35i bookshelf-speaker unit that is contextually interpretable as a two-speaker 2.0 set rather than a single speaker, because the offer is identified in plural and lists 2.0 channel with no explicit single-speaker limitation. It is available used for $159.99, with $75 fixed Economy Shipping and seller-arranged local pickup also shown.",
+      "requested_purchase": "Two Polk RT35i speakers",
+      "offered_purchase": "One available Polk Audio RT35i Bookshelf Speakers listing, contextually interpreted as a two-speaker 2.0 set; used; $159.99 plus $75 Economy Shipping, with seller-arranged local pickup also available",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "WTB: Two Polk RT35i speakers",
+          "supports": "Buyer wants quantity two of the RT35i model."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way",
+          "supports": "Offer identity as Polk Audio RT35i speakers, with plural speaker wording."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Condition: Used",
+          "supports": "Offered condition is used."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Price: 159.99 USD",
+          "supports": "Item price is $159.99."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "System Configuration: 2.0 Channel",
+          "supports": "Supports contextual interpretation of the saleable unit as a two-speaker stereo set."
+        },
+        {
+          "id": "s5",
+          "source": "seller",
+          "quote": "Unit Quantity: 1",
+          "supports": "There is one saleable unit/listing."
+        },
+        {
+          "id": "s6",
+          "source": "seller",
+          "quote": "estimatedAvailabilities: [{\"deliveryOptions\": [\"SHIP_TO_HOME\", \"SELLER_ARRANGED_LOCAL_PICKUP\"], \"estimatedAvailabilityStatus\": \"IN_STOCK\", \"estimatedAvailableQuantity\": 1, \"estimatedSoldQuantity\": 0, \"estimatedRemainingQuantity\": 1}]",
+          "supports": "The listing is in stock and shows both ship-to-home and seller-arranged local pickup delivery options."
+        },
+        {
+          "id": "s7",
+          "source": "seller",
+          "quote": "shippingOptions: [{\"shippingServiceCode\": \"Economy Shipping\", \"type\": \"Economy Shipping\", \"shippingCost\": {\"value\": \"75.00\", \"currency\": \"USD\"}, \"quantityUsedForEstimate\": 1, \"minEstimatedDeliveryDate\": \"2026-11-14T10:00:00.000Z\", \"maxEstimatedDeliveryDate\": \"2026-11-20T10:00:00.000Z\", \"additionalShippingCostPerUnit\": {\"value\": \"45.00\", \"currency\": \"USD\"}, \"shippingCostType\": \"FIXED\"}]",
+          "supports": "Shipping is offered by Economy Shipping with a fixed $75.00 charge."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "Interpreted \"Unit Quantity: 1\" as one saleable RT35i speaker set, not one single speaker, because the offer is identified as \"Speakers\" and lists \"System Configuration: 2.0 Channel\" with no explicit single-speaker limitation."
+      ]
+    }
+  },
+  {
+    "id": "P03",
+    "input": {
+      "buyer_text": "WTB: Two Polk RT35i speakers\nHello, I am looking for two RT35i speakers. Thank you!",
+      "seller_text": "Polk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way\nSeller description:\nPolk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way. Condition is Used. Shipped with Economy Shipping.\nCondition: Used\nPrice: 159.99 USD\nCompatible Brand: Universal\nDriver Size: 6.5 in\nSystem Configuration: 2.0 Channel\nShape: Rectangular\nColor: Black\nCompatible Model: Universal\nMaterial: Wood\nSmart Home Compatibility: None\nBrand: Polk Audio\nType: Bookshelf Speakers\nUnit Type: Unit\nModel: Polk Audio RT35i\nConnectivity: Wired\nFeatures: Compact, Design, High End, Mini, Small\nRMS Power: 100 W\nUnit Quantity: 1\nImpedance: 8 Ohms\nCountry of Origin: China\nestimatedAvailabilities: [{\"deliveryOptions\": [\"SHIP_TO_HOME\", \"SELLER_ARRANGED_LOCAL_PICKUP\"], \"estimatedAvailabilityStatus\": \"IN_STOCK\", \"estimatedAvailableQuantity\": 1, \"estimatedSoldQuantity\": 0, \"estimatedRemainingQuantity\": 1}]\nitemLocation: {\"city\": \"Greenville\", \"stateOrProvince\": \"South Carolina\", \"postalCode\": \"296**\", \"country\": \"US\"}\nshippingOptions: [{\"shippingServiceCode\": \"Economy Shipping\", \"type\": \"Economy Shipping\", \"shippingCost\": {\"value\": \"75.00\", \"currency\": \"USD\"}, \"quantityUsedForEstimate\": 1, \"minEstimatedDeliveryDate\": \"2026-11-14T10:00:00.000Z\", \"maxEstimatedDeliveryDate\": \"2026-11-20T10:00:00.000Z\", \"additionalShippingCostPerUnit\": {\"value\": \"45.00\", \"currency\": \"USD\"}, \"shippingCostType\": \"FIXED\"}]\nbuyingOptions: [\"FIXED_PRICE\"]"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants two RT35i speakers, and the seller offers one saleable Polk Audio RT35i bookshelf-speaker listing that is best interpreted as a two-speaker set: the title is plural, the listing says 2.0 Channel, and Unit Quantity is 1. No explicit single-speaker limitation or other disqualifying conflict is stated.",
+      "requested_purchase": "Two Polk RT35i speakers.",
+      "offered_purchase": "One Polk Audio RT35i bookshelf speaker set (contextually interpreted as two speakers), used, for 159.99 USD plus 75.00 USD Economy Shipping; ship-to-home or seller-arranged local pickup.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I am looking for two RT35i speakers.",
+          "supports": "Buyer wants two RT35i speakers."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk Audio RT35i Bookshelf Speakers 125 Watts 6.5\" Woofer 1\" Dome Tweeter  2-Way",
+          "supports": "Offered item is Polk Audio RT35i bookshelf speakers, stated in plural."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Condition is Used. Shipped with Economy Shipping.",
+          "supports": "Used condition and Economy Shipping method."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Price: 159.99 USD",
+          "supports": "Item price is 159.99 USD."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "System Configuration: 2.0 Channel",
+          "supports": "Supports contextual interpretation that the one saleable unit is a two-speaker setup."
+        },
+        {
+          "id": "s5",
+          "source": "seller",
+          "quote": "Unit Quantity: 1",
+          "supports": "Shows there is one saleable unit/listing quantity, not one speaker explicitly."
+        },
+        {
+          "id": "s6",
+          "source": "seller",
+          "quote": "estimatedAvailabilities: [{\"deliveryOptions\": [\"SHIP_TO_HOME\", \"SELLER_ARRANGED_LOCAL_PICKUP\"],",
+          "supports": "Seller offers ship-to-home and seller-arranged local pickup."
+        },
+        {
+          "id": "s7",
+          "source": "seller",
+          "quote": "shippingOptions: [{\"shippingServiceCode\": \"Economy Shipping\", \"type\": \"Economy Shipping\", \"shippingCost\": {\"value\": \"75.00\", \"currency\": \"USD\"},",
+          "supports": "Economy Shipping has a stated fixed cost of 75.00 USD."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "Contextual interpretation under the speaker-count rule: the plural title together with System Configuration: 2.0 Channel and Unit Quantity: 1 indicates one saleable RT35i two-speaker set rather than a single speaker."
+      ]
+    }
+  },
+  {
+    "id": "Q01",
+    "input": {
+      "buyer_text": "I want to buy two Polk RT35i speakers as a left and right set.",
+      "seller_text": "Polk Audio RT35i Bookshelf Speakers. System Configuration: 2.0 Channel. Unit Quantity: 1. This sale includes ONE speaker only, not a pair. No second speaker is available."
+    },
+    "answer": {
+      "decision": "No Send",
+      "reason": "The buyer wants a two-speaker left/right set, but the seller explicitly offers only one speaker and says no second speaker is available.",
+      "requested_purchase": "Two Polk RT35i speakers as a left and right set.",
+      "offered_purchase": "One Polk Audio RT35i bookshelf speaker only; not a pair, with no second speaker available.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I want to buy two Polk RT35i speakers as a left and right set.",
+          "supports": "Buyer requires two speakers together as a left/right set."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk Audio RT35i Bookshelf Speakers.",
+          "supports": "Identifies the speaker model offered."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "This sale includes ONE speaker only, not a pair.",
+          "supports": "Seller explicitly offers a single speaker rather than the requested two-speaker set."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "No second speaker is available.",
+          "supports": "Confirms the seller cannot provide the required second speaker."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "Q02",
+    "input": {
+      "buyer_text": "I want to buy two Polk RT35i speakers as a left and right set.",
+      "seller_text": "Polk RT35i replacement left speaker only, used and working. One speaker for $80. No right speaker included or available."
+    },
+    "answer": {
+      "decision": "No Send",
+      "reason": "The buyer wants a two-speaker left-and-right Polk RT35i set, but the seller offers only a single replacement left speaker and explicitly says no right speaker is included or available.",
+      "requested_purchase": "Two Polk RT35i speakers as a left and right set",
+      "offered_purchase": "One Polk RT35i replacement left speaker only for $80",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I want to buy two Polk RT35i speakers as a left and right set.",
+          "supports": "Buyer requires a two-speaker left-and-right set."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk RT35i replacement left speaker only, used and working.",
+          "supports": "Seller is offering only a single left replacement speaker."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "One speaker for $80.",
+          "supports": "Seller offers one speaker, not a pair."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "No right speaker included or available.",
+          "supports": "Seller cannot provide the required right speaker for a left-and-right set."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "Q03",
+    "input": {
+      "buyer_text": "I want to buy two Polk RT35i speakers as a left and right set.",
+      "seller_text": "Stereo receiver, 2.0 channels. Unit Quantity: 1. Receiver only; no speakers included."
+    },
+    "answer": {
+      "decision": "No Send",
+      "reason": "The buyer wants a pair of Polk RT35i speakers, but the seller is offering only a stereo receiver and explicitly says no speakers are included.",
+      "requested_purchase": "Two Polk RT35i speakers as a left/right set",
+      "offered_purchase": "Stereo receiver only, no speakers included",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I want to buy two Polk RT35i speakers as a left and right set.",
+          "supports": "Buyer requests a two-speaker Polk RT35i left/right set."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Stereo receiver, 2.0 channels.",
+          "supports": "Seller is offering a stereo receiver, not Polk RT35i speakers."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Receiver only; no speakers included.",
+          "supports": "Seller explicitly states that no speakers are included, which conflicts with the buyer's requested purchase."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "Q04",
+    "input": {
+      "buyer_text": "I want to buy two Polk RT35i speakers as a left and right set.",
+      "seller_text": "Polk RT35i equipment available. System Configuration: 2.0 Channel. Unit Quantity: 1. Contents and number of speakers unknown."
+    },
+    "answer": {
+      "decision": "Incomplete",
+      "reason": "The buyer wants a left/right two-speaker Polk RT35i set, but the seller does not identify whether the single sale unit includes two speakers, one speaker, or some other contents. The comparison cannot be completed reliably from the supplied listing.",
+      "requested_purchase": "Two Polk RT35i speakers as a left and right set.",
+      "offered_purchase": "Polk RT35i equipment; one sale unit with unknown contents and unknown number of speakers.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I want to buy two Polk RT35i speakers as a left and right set.",
+          "supports": "Buyer requires a two-speaker left/right set."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk RT35i equipment available.",
+          "supports": "Seller is offering Polk RT35i equipment."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "System Configuration: 2.0 Channel.",
+          "supports": "Seller lists a 2.0 channel configuration, which suggests stereo context but does not by itself identify included speaker count."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Unit Quantity: 1.",
+          "supports": "Seller lists one sale unit."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "Contents and number of speakers unknown.",
+          "supports": "Seller explicitly leaves the included contents and speaker count unidentified, preventing reliable matching to the buyer's required left/right pair."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [
+        "Whether the offered unit includes a left/right pair of two RT35i speakers or some other contents."
+      ],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "Q05",
+    "input": {
+      "buyer_text": "I want to buy two Polk RT35i speakers as a left and right set.",
+      "seller_text": "Polk RT35i pair for sale: two speakers, left and right, both working. Unit Quantity: 1 set. $160 for the pair."
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants a left-and-right set of two Polk RT35i speakers, and the seller explicitly offers a Polk RT35i pair consisting of two speakers, left and right, for one set at $160, with both working.",
+      "requested_purchase": "Two Polk RT35i speakers as a left-and-right set.",
+      "offered_purchase": "One set of Polk RT35i speakers: a left-and-right pair, both working, for $160.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I want to buy two Polk RT35i speakers as a left and right set.",
+          "supports": "Buyer requests two Polk RT35i speakers as a left-and-right set."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk RT35i pair for sale: two speakers, left and right, both working.",
+          "supports": "Seller offers the requested model as a two-speaker left-and-right pair and states both are working."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Unit Quantity: 1 set.",
+          "supports": "Seller indicates the saleable unit is one set."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "$160 for the pair.",
+          "supports": "Seller states the price for the pair."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "Q06",
+    "input": {
+      "buyer_text": "I want to buy two Polk RT35i speakers as a left and right set.",
+      "seller_text": "Polk RT35i pair: two working speakers. Both have a 6.5\" woofer and 1\" tweeter. Label reads RT35i\\L and RT35i\\R. $160 for both."
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants two Polk RT35i speakers as a left/right set, and the seller offers a Polk RT35i pair consisting of two working speakers, explicitly labeled left and right, priced together.",
+      "requested_purchase": "Two Polk RT35i speakers as a left and right set.",
+      "offered_purchase": "Polk RT35i pair: two working speakers labeled RT35i\\L and RT35i\\R for $160 for both.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I want to buy two Polk RT35i speakers as a left and right set.",
+          "supports": "States the requested item, quantity, and left/right set requirement."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Polk RT35i pair: two working speakers.",
+          "supports": "Shows the seller offers the requested model as a pair of two speakers and states they are working."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Label reads RT35i\\L and RT35i\\R.",
+          "supports": "Shows the offered pair is explicitly a left/right set."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "$160 for both.",
+          "supports": "States the price for the pair."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U01",
+    "input": {
+      "buyer_text": "[WTB] Looking for a Lamy 2000 F/EF nib.\n\nSo, I recently got a Lamy 2000 second hand and, being the idiot I am, dropped it right on its nib. It bent a bit and I was able to bend it back a tinker with it but, obviously, it just doesn't write the same. New nibs are like half the price of what the pen costs new, so I'm looking to see if anyone might be willing to sell one for a decent price.\n\nShot in the dark, I know, but just figured I'd throw it out there and ask!",
+      "seller_text": "[WTT] Lamy 2000 <EF> nib (only) for <M> or greater\n\nVerification\n\nGreetings! I have a Lamy 2000 **<EF>** nib that is too thin for me. Want like to trade your <M> or <B> nib for my **<EF>** nib? Straight up, one for one, both of us pay shipping/insurance to get it to the other party. This is for a nib ONLY! Nothing more. I don't want your pen! Just the nib! I'll need to see your nib with today's date and your username. Mine is in the verification. It's simple to remove the nib as I just did it to take a photo.\n\nHere’s a video on how to remove it safely.\n\nThe sub bot has suggested \"cross buying\" so that you pay me for mine, and I pay for yours. I can do that too. We should chat.\n\nLet's do this!! CONUS only please to keep the shipping costs below $10. All sub rules apply. Please respond publicly first. Thank you!"
+    },
+    "answer": {
+      "decision": "No Send",
+      "reason": "The seller does have a Lamy 2000 EF nib, which matches one of the buyer's requested sizes, but the listing is for a trade or reciprocal cross-buy tied to the buyer providing their own nib. The buyer asked for someone willing to sell a replacement nib, and the seller does not establish an outright standalone sale.",
+      "requested_purchase": "A Lamy 2000 F or EF nib to buy for a decent price.",
+      "offered_purchase": "A Lamy 2000 EF nib only, offered in exchange for the buyer's M-or-greater nib, with possible reciprocal 'cross buying' instead of a simple standalone sale; CONUS only.",
+      "evidence": [
+        {
+          "id": "B1",
+          "source": "buyer",
+          "quote": "[WTB] Looking for a Lamy 2000 F/EF nib.",
+          "supports": "Buyer wants a Lamy 2000 nib in F or EF size."
+        },
+        {
+          "id": "B2",
+          "source": "buyer",
+          "quote": "New nibs are like half the price of what the pen costs new, so I'm looking to see if anyone might be willing to sell one for a decent price.",
+          "supports": "Buyer is seeking a seller willing to sell the nib."
+        },
+        {
+          "id": "S1",
+          "source": "seller",
+          "quote": "[WTT] Lamy 2000 <EF> nib (only) for <M> or greater",
+          "supports": "Seller's main offer is an EF nib in trade for a larger nib, not a straightforward sale."
+        },
+        {
+          "id": "S2",
+          "source": "seller",
+          "quote": "Want like to trade your <M> or <B> nib for my **<EF>** nib? Straight up, one for one, both of us pay shipping/insurance to get it to the other party.",
+          "supports": "Seller requires a one-for-one nib trade."
+        },
+        {
+          "id": "S3",
+          "source": "seller",
+          "quote": "The sub bot has suggested \"cross buying\" so that you pay me for mine, and I pay for yours. I can do that too. We should chat.",
+          "supports": "Seller mentions cross-buying only as a reciprocal exchange method, not as an independent sale."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U02",
+    "input": {
+      "buyer_text": "[WTB] Looking for a Lamy 2000 F/EF nib.\n\nSo, I recently got a Lamy 2000 second hand and, being the idiot I am, dropped it right on its nib. It bent a bit and I was able to bend it back a tinker with it but, obviously, it just doesn't write the same. New nibs are like half the price of what the pen costs new, so I'm looking to see if anyone might be willing to sell one for a decent price.\n\nShot in the dark, I know, but just figured I'd throw it out there and ask!",
+      "seller_text": "[WTS][US] Lamy 2000 <F>\n\nVerification and images https://postimg.cc/gallery/VYKc0Nq\n\nHello,\n\n~~Looking to sell my Lamy 2000 ( fine nib ) for $140 shipped US only.~~ SOLD\n\nA2 condition no box included\n\nPayPal G&S only\n\nThank you for looking."
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The buyer wants a Lamy 2000 nib only, specifically F or EF. The seller’s only relevant offer is a complete Lamy 2000 pen with a fine nib, not a separate nib, and that offer is explicitly marked SOLD.",
+      "requested_purchase": "Lamy 2000 nib only, in F or EF",
+      "offered_purchase": "Complete Lamy 2000 pen with fine nib for $140 shipped US only, marked SOLD",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB] Looking for a Lamy 2000 F/EF nib.",
+          "supports": "Buyer requests a Lamy 2000 nib only, in F or EF."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "New nibs are like half the price of what the pen costs new, so I'm looking to see if anyone might be willing to sell one for a decent price.",
+          "supports": "Buyer is seeking someone willing to sell a nib, not a full pen."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[WTS][US] Lamy 2000 <F>",
+          "supports": "Seller’s item is a Lamy 2000 with a fine nib."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "~~Looking to sell my Lamy 2000 ( fine nib ) for $140 shipped US only.~~ SOLD",
+          "supports": "Seller offered the complete pen, not a separate nib, and explicitly marked it SOLD/unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U03",
+    "input": {
+      "buyer_text": "[WTB] Lamy 2000 EF or F\n\nI always seem to miss these, so I thought I would just put it out there in case someone is thinking about selling one.  Totally fine with signs of use on the pen body (as long as the nib is in good shape). Thanks!",
+      "seller_text": "[WTS] Lamy 2000 (EF)\n\nNew (never used) Lamy 2000 with an EF nib. This was my 2nd one purchased but before trying it I got a Lamy Dialog and like that size better. Because of that, the pen never got used. Comes with box. Asking $140 because of its pristine condition (A+). Shipping only to the lower 48 U.S.  All sub rules to be followed. Thank you for looking.\n\nverification:  https://imgur.com/a/ONeWrm1"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants a Lamy 2000 with either an EF or F nib, and the seller offers a Lamy 2000 with an EF nib. The buyer allows used body wear as long as the nib is good; the seller's pen is new and never used, so there is no conflict.",
+      "requested_purchase": "Lamy 2000 fountain pen with EF or F nib; body wear acceptable if nib is in good shape.",
+      "offered_purchase": "Lamy 2000 fountain pen with EF nib, new/never used, includes box, $140, shipping only to the lower 48 U.S.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB] Lamy 2000 EF or F",
+          "supports": "Buyer requests a Lamy 2000 with either EF or F nib."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Totally fine with signs of use on the pen body (as long as the nib is in good shape).",
+          "supports": "Buyer permits cosmetic wear on the pen body if the nib is in good shape."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[WTS] Lamy 2000 (EF)",
+          "supports": "Seller is offering a Lamy 2000 with an EF nib."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "New (never used) Lamy 2000 with an EF nib.",
+          "supports": "Seller confirms the exact model, nib size, and that the pen is new and never used."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Comes with box.",
+          "supports": "Seller states the included accessory."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "Asking $140 because of its pristine condition (A+).",
+          "supports": "Seller states the price and condition assessment."
+        },
+        {
+          "id": "s5",
+          "source": "seller",
+          "quote": "Shipping only to the lower 48 U.S.  All sub rules to be followed.",
+          "supports": "Seller states the shipping limitation and applicable listing-wide rules."
+        }
+      ],
+      "seller_note_ids": [
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U04",
+    "input": {
+      "buyer_text": "[WTB] Lamy 2000 EF or F\n\nI always seem to miss these, so I thought I would just put it out there in case someone is thinking about selling one.  Totally fine with signs of use on the pen body (as long as the nib is in good shape). Thanks!",
+      "seller_text": "[WTS]  Lamy 2K - Black Makrolon\n\n~~\\[CONUS ONLY\\]  Lamy 2K - Black Makrolon - \\[A1\\] - Never Inked/Never Used.  Broad Nib.~~\n\n~~Includes original box and outer sleeve.  $170 - Includes expedited shipping - PayPal G&S~~\n\n~~Pics/Verification:~~  ~~https://imgur.com/a/rqXNhPu~~   **SOLD**"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The buyer wants a Lamy 2000 with an EF or F nib. The seller’s only offered pen is a Broad nib, and the listing is explicitly marked SOLD, so the offered purchase is unavailable and also does not meet the requested nib requirement.",
+      "requested_purchase": "Lamy 2000 with EF or F nib; body wear is acceptable if the nib is in good shape.",
+      "offered_purchase": "Lamy 2K Black Makrolon pen, Broad nib, includes original box and outer sleeve, $170 with expedited shipping via PayPal G&S, marked SOLD.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB] Lamy 2000 EF or F",
+          "supports": "Buyer requests a Lamy 2000 specifically with EF or F nib."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Totally fine with signs of use on the pen body (as long as the nib is in good shape).",
+          "supports": "Buyer allows body wear if the nib is in good shape."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[WTS]  Lamy 2K - Black Makrolon",
+          "supports": "Seller is offering a Lamy 2K Black Makrolon pen."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "~~\\[CONUS ONLY\\]  Lamy 2K - Black Makrolon - \\[A1\\] - Never Inked/Never Used.  Broad Nib.~~",
+          "supports": "Seller’s pen has a Broad nib, not EF or F, and is the only listed offer."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "~~Includes original box and outer sleeve.  $170 - Includes expedited shipping - PayPal G&S~~",
+          "supports": "Seller states included accessories, price, shipping inclusion, and payment method."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "**SOLD**",
+          "supports": "The offered pen is explicitly unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "Interpreted Lamy 2K as referring to the same Lamy 2000 line requested by the buyer."
+      ]
+    }
+  },
+  {
+    "id": "U05",
+    "input": {
+      "buyer_text": "[WTB] [US-TN] [H] PayPal, Local Cash [W] Sennheiser HD 660S2\n\nLooking to spend around $300-$350, depending on wear and tear on the headphones.\n\n\nThanks!",
+      "seller_text": "[WTS] [US-CA] [H] Sennheiser HD660s2 [W] PayPal G&S, Local cash\n\nSHARED URL\nI literally just recently received these in a trade, nothing wrong with them and they sound awesome. I traded for them as I wanted a Sennheiser hd6-- series headphone for gaming. However, I just snagged a pair of hd6xx for $90 off Facebook marketplace Place so I could use the money from these.\nComes with Original box, headphones, bag and 4.4mm cable. MISSING THE 1/4\" CABLE AND 1/4\" TO 3.5MM ADAPTER. Willing to print a capra strap and clips if requested, but I don't think these cans really need it. But again if you would prefer it, I can print one upon request.\nAsking $290 shipped, $280 local (zip 92223) Price is OBO"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The seller offers the requested Sennheiser HD 660S2 for $290 shipped, which is within the buyer’s stated target budget, and there is no established conflict. The seller discloses that the headphones work and also discloses missing original accessories, which the buyer did not require.",
+      "requested_purchase": "Sennheiser HD 660S2 headphones, around $300-$350 depending on wear",
+      "offered_purchase": "Sennheiser HD660s2 headphones with original box, bag, and 4.4mm cable; missing 1/4\" cable and 1/4\" to 3.5mm adapter; $290 shipped or $280 local",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB] [US-TN] [H] PayPal, Local Cash [W] Sennheiser HD 660S2",
+          "supports": "Buyer wants a Sennheiser HD 660S2 and can pay by PayPal or local cash."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Looking to spend around $300-$350, depending on wear and tear on the headphones.",
+          "supports": "Buyer’s target budget is around $300-$350, with condition affecting preference."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[WTS] [US-CA] [H] Sennheiser HD660s2 [W] PayPal G&S, Local cash",
+          "supports": "Seller is offering the Sennheiser HD660s2 and accepts PayPal G&S or local cash."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "I literally just recently received these in a trade, nothing wrong with them and they sound awesome.",
+          "supports": "Seller states the headphones have no problems and describes their working condition positively."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Comes with Original box, headphones, bag and 4.4mm cable. MISSING THE 1/4\" CABLE AND 1/4\" TO 3.5MM ADAPTER.",
+          "supports": "Seller discloses included contents and missing accessories."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "Asking $290 shipped, $280 local (zip 92223) Price is OBO",
+          "supports": "Seller’s price and shipping/local terms."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U06",
+    "input": {
+      "buyer_text": "[WTB] [US-TN] [H] PayPal, Local Cash [W] Sennheiser HD 660S2\n\nLooking to spend around $300-$350, depending on wear and tear on the headphones.\n\n\nThanks!",
+      "seller_text": "[WTS] [USA-MA] [H] Sennheiser HD 660 S2 [W] Paypal G&S, Local Cash\n\nSHARED URL\n~~Got second hand, but new in box. Used for maybe an hour~~\n~~Headphones come with two cables w/ adapter, storage bag, box and booklets~~\n~~Asking $310 shipped. US only please. Comment before PM~~ Sold"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The seller offers the requested headphone model at a price within the buyer's target, but the listing explicitly marks it as sold, so the item is unavailable.",
+      "requested_purchase": "Sennheiser HD 660S2 headphones, around $300-$350 depending on wear.",
+      "offered_purchase": "Sennheiser HD 660 S2 headphones with two cables w/ adapter, storage bag, box and booklets, asking $310 shipped, marked sold.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Sennheiser HD 660S2",
+          "supports": "Requested item model."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Looking to spend around $300-$350, depending on wear and tear on the headphones.",
+          "supports": "Buyer target budget and condition sensitivity."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Sennheiser HD 660 S2",
+          "supports": "Seller's offered item model matches the requested headphone."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "~~Headphones come with two cables w/ adapter, storage bag, box and booklets~~",
+          "supports": "Seller states the included accessories and packaging."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "~~Asking $310 shipped. US only please. Comment before PM~~ Sold",
+          "supports": "Seller's asked price, shipping scope, contact instruction, and explicit sold status showing unavailability."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U07",
+    "input": {
+      "buyer_text": "[WTB][USA-CA][W] Sennheiser HD650 or 6XX [H] PayPal.\n\nLooking to add a set of Sennys. Hit me up if you have any in need of a loving home ✌️",
+      "seller_text": "[WTS][US-NY][H] Sennheiser HD6XX, Beyerdynamic DT880 [W] PayPal\n\nSelling a couple pairs of headphones that haven’t seen use since switching to monitors. Both were bought here around 2021 and used lightly. Located in 10595.\n\n**Sennheiser HD6XX**  \nVery good condition. Pads still have solid life left. Small dent on the lower right grille, though purely cosmetic, no impact on sound. Includes 10 ft cable with 1/4\" termination.  \n~~$110 local / $125 shipped~~  Sold on FB\n\n**Beyerdynamic DT 880 (250 ohm)**  \nPads show some wear but still comfortable and seal fine. No mods.  \n$100 local / $115 shipped\n\nPickup preferred, can ship if needed. Thanks everyone.\n\nImage: img"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The buyer wants a Sennheiser HD650 or 6XX. The seller does list a Sennheiser HD6XX, but that matching item is explicitly unavailable: Sold on FB. The other available headphone is a Beyerdynamic DT 880, which is not one of the buyer’s requested models.",
+      "requested_purchase": "Sennheiser HD650 or Sennheiser 6XX headphones",
+      "offered_purchase": "Sennheiser HD6XX headphones, listed in very good condition with cable, but marked Sold on FB",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB][USA-CA][W] Sennheiser HD650 or 6XX [H] PayPal.",
+          "supports": "Buyer requests either a Sennheiser HD650 or 6XX."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[WTS][US-NY][H] Sennheiser HD6XX, Beyerdynamic DT880 [W] PayPal",
+          "supports": "Seller's listing includes a Sennheiser HD6XX."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "**Sennheiser HD6XX**",
+          "supports": "Identifies the matching offered model."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "~~$110 local / $125 shipped~~  Sold on FB",
+          "supports": "The matching Sennheiser HD6XX is explicitly sold/unavailable."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "**Beyerdynamic DT 880 (250 ohm)**",
+          "supports": "The other headphone still listed is a different model than the buyer requested."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U08",
+    "input": {
+      "buyer_text": "[WTB][USA-CA][W] Sennheiser HD650 or 6XX [H] PayPal.\n\nLooking to add a set of Sennys. Hit me up if you have any in need of a loving home ✌️",
+      "seller_text": "[WTS] [US-CA] [H] DCA Aeon Open X, Sennheiser HD660s, HD6XX [W] Local Cash, Venmo G&S\n\n1. DCA Aeon Open X - $250 OBO\n   Literally traded for these this morning. Very good condition and sound nice, just not my style. Come with all tuning pads and travel case.\n\n2. Sennheiser HD660s - $220 OBO\n   These are my babies, but if I can get more than the 6xx, I'll let them go. Come with original 9ft cable and BRAND NEW ear pads and headband with less than an hour on them.\n\n3. Sennheiser HD6XX - $150 OBO\n   These are in great condition. Comes with original box and cable. Minor paint chips. Only selling one or the other of my Sennheisers.\n\nAll prices are obo. Local cash, or venmo good and services. I don't have PayPal but buy and trade on here all the time. If that doesn't work for you but you're interested, let me know, I can probably use my mom or wife's PayPal. But would prefer not too.\n\n\nOh and please comment first."
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants either a Sennheiser HD650 or HD6XX. The seller offers a Sennheiser HD6XX for $150 OBO in great condition with original box and cable. The seller prefers local cash or Venmo G&S and does not normally use PayPal, but offers a probable PayPal workaround if needed; that payment qualification does not establish a mismatch with the buyer's post.",
+      "requested_purchase": "Sennheiser HD650 or HD6XX",
+      "offered_purchase": "Sennheiser HD6XX for $150 OBO, with original box and cable",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB][USA-CA][W] Sennheiser HD650 or 6XX [H] PayPal.",
+          "supports": "Buyer accepts either HD650 or HD6XX and has PayPal."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "3. Sennheiser HD6XX - $150 OBO",
+          "supports": "Seller offers the requested HD6XX model and states the price."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "These are in great condition. Comes with original box and cable. Minor paint chips. Only selling one or the other of my Sennheisers.",
+          "supports": "Seller states condition, included items, cosmetic note, and that this sale is mutually exclusive with the other Sennheiser listing."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "All prices are obo. Local cash, or venmo good and services. I don't have PayPal but buy and trade on here all the time. If that doesn't work for you but you're interested, let me know, I can probably use my mom or wife's PayPal. But would prefer not too.",
+          "supports": "Seller states payment terms and the qualified PayPal workaround."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "Oh and please comment first.",
+          "supports": "Seller gives the contact workflow instruction."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U09",
+    "input": {
+      "buyer_text": "[US-CO] [H] Paypal [W] GPX 2 or Superstrike\n\nHi! i’m looking to buy either the regular g pro x superlight 2 or the superstrike. Any color is okay. Ok with mods if it doesn’t impede with function (weight mods, etc). i’d prefer if skates are aftermarket but if not it’s fine also. thanks!",
+      "seller_text": "[US-CA] [H] Lamzu Maya X,  Razer Viper V3 Pro, G pro superlight 2, Ninjutso Sora V2, Razer Deathadder V3 Pro, Lamzu Maya, Razer Viper Ultimate , Razer Viper v2 pro [W] Paypal , Artisan Type 99 XL Soft\n\nTimestamp - URL\n\nLooking to get rid of some mice that I am no longer using. Only trade im looking for is an Artisan Type 99, thank you\nAll prices are OBO, feel free to send an offer!\n\nLamzu Maya X - $80 shipped. Used for 2 days, comes in original box with 8k dongle and accessories. Stock skates installed\n\nRazer Viper v3 Pro -  $80 shipped. Used for a week or so, will come in original box. Stock skates installed\n\nLogitech G Pro X Superlight 2 - $80 shipped. Used on and off for a month or so. Will ship in original box, no usb c cable or extender. Has corepad skatez installed\n\nNinjutso Sora V2 - $65 shipped. Used lightly for a month or so, stock skates installed. Will ship in original box with 1k dongle\n\nRazer Deathadder v3 Pro - $60 shipped. Barely used for not even a day, ergo ended up not being for me. Will ship in original box\n\nLamzu Maya - $55 shipped. Also basically brand new, ended up being too small for me\n\nRazer Viper v2 pro - $45 shipped. Basically brand new, will ship in original box"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "Buyer will take either a regular GPX 2 or a Superstrike, and the seller offers a Logitech G Pro X Superlight 2. The offer has aftermarket Corepad skates installed, which fits the buyer’s skate preference, and no explicit buyer term is contradicted.",
+      "requested_purchase": "Either a regular Logitech G Pro X Superlight 2 or a Superstrike mouse; any color; mods okay if function is not affected; aftermarket skates preferred but not required.",
+      "offered_purchase": "Logitech G Pro X Superlight 2 for $80 shipped, used on and off for about a month, ships in original box, no USB-C cable or extender, Corepad skates installed.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Hi! i’m looking to buy either the regular g pro x superlight 2 or the superstrike.",
+          "supports": "Buyer accepts either of these two mouse options."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Any color is okay.",
+          "supports": "Buyer has no color restriction."
+        },
+        {
+          "id": "b3",
+          "source": "buyer",
+          "quote": "Ok with mods if it doesn’t impede with function (weight mods, etc).",
+          "supports": "Buyer permits mods as long as function is not impaired."
+        },
+        {
+          "id": "b4",
+          "source": "buyer",
+          "quote": "i’d prefer if skates are aftermarket but if not it’s fine also.",
+          "supports": "Aftermarket skates are a preference, not a requirement."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[W] Paypal , Artisan Type 99 XL Soft",
+          "supports": "Seller accepts PayPal."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "All prices are OBO, feel free to send an offer!",
+          "supports": "Listing-wide pricing/contact term: price is negotiable and seller invites offers."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Logitech G Pro X Superlight 2 - $80 shipped. Used on and off for a month or so. Will ship in original box, no usb c cable or extender. Has corepad skatez installed",
+          "supports": "Seller offers the requested GPX 2 alternative, with price, shipping included, condition, included packaging, exclusions, and aftermarket skates."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U10",
+    "input": {
+      "buyer_text": "[US-CO] [H] Paypal [W] GPX 2 or Superstrike\n\nHi! i’m looking to buy either the regular g pro x superlight 2 or the superstrike. Any color is okay. Ok with mods if it doesn’t impede with function (weight mods, etc). i’d prefer if skates are aftermarket but if not it’s fine also. thanks!",
+      "seller_text": "[US-CA] [H] Starlight TenZ, Prophecy Clix, Viper V3 Pro, GPX2 [W] PayPal\n\nTimestamp\n\nMouses and prices:\n\nFinalmouse Starlight-12 TenZ - Medium (~~90 shipped)~~ SOLD\n\nFinalmouse ULX Prophecy Clix - Medium (155 shipped)\n\nRazer Viper V3 Pro - Sentinels Edition (~~85 shipped~~) SOLD\n\nLogitech G Pro X Superlight 2 - White (~~80 shipped~~) SOLD\n\nChat before PM. Thanks for looking!"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The buyer would accept either a GPX 2 / G Pro X Superlight 2 or a Superstrike, but the seller's only matching item is the Logitech G Pro X Superlight 2 and it is explicitly marked SOLD. No Superstrike is offered.",
+      "requested_purchase": "Either a Logitech G Pro X Superlight 2 (GPX 2) or a Superstrike mouse, any color; mods are acceptable if function is not impaired.",
+      "offered_purchase": "Logitech G Pro X Superlight 2 - White for 80 shipped, but marked SOLD; other listed mice are different models.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Hi! i’m looking to buy either the regular g pro x superlight 2 or the superstrike.",
+          "supports": "Buyer accepts either a G Pro X Superlight 2 or a Superstrike."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Mouses and prices:\n\nFinalmouse Starlight-12 TenZ - Medium (~~90 shipped)~~ SOLD\n\nFinalmouse ULX Prophecy Clix - Medium (155 shipped)\n\nRazer Viper V3 Pro - Sentinels Edition (~~85 shipped~~) SOLD\n\nLogitech G Pro X Superlight 2 - White (~~80 shipped~~) SOLD",
+          "supports": "Seller's listed offers include a G Pro X Superlight 2, but it is explicitly SOLD; no Superstrike is listed."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U11",
+    "input": {
+      "buyer_text": "[US-CA] [H] PayPal [W] G Pro Superlight 2c, WLMouse Huan\n\nI’m looking to buy either a Superlight 2c or a WLMouse Huan. Send me your offers. Please comments before PM. Thank you.",
+      "seller_text": "[US-NJ] [H] Logitech Superlight 2c, ROG Harpe Ace, Viper V3 SE, Viper V2 Pro, XM1r [W] PayPal, Pulsar X Jinggg, HTS+ Pro, Viper V4 Pro, Wallhack SP-005, HTS+\n\nTimestamp: https://imgur.com/a/JOmsgje\n\nLooking to sell a few mice I'm no longer using. All are fully functional with no issues.\n\n**Logitech G Pro X Superlight 2c — $70 shipped OBO**  \nLike-new condition. Pulsar black dot skates installed.\n\n**ASUS ROG Harpe Ace — $65 shipped OBO**  \nLightly used and in great condition. Original box included.\n\n**Razer Viper V3 SE — $55 shipped OBO**  \nGreat condition. X-Raypad Jade dot skates installed. Original box included.\n\n**Endgame Gear XM1r — $20 shipped OBO**  \nUsed condition, fully functional with no issues. No box.\n\n**Trades**\n\nWilling to trade one or multiple mice depending on value for:\n\n* Pulsar X Jinggg — brand new or extremely lightly used\n* G-Wolves HTS+ Pro — similar condition\n* G-Wolves HTS+ — brand new\n* Razer Viper V4 Pro — new or like-new\n* Wallhack SP-005 — new\n\nCan add or discuss cash depending on the trade.\n\nPayPal Goods & Services only.\n\nPlease comment before PM."
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer is open to either a Superlight 2c or a WLMouse Huan, and the seller offers a Logitech G Pro X Superlight 2c for sale. The seller’s offer matches one accepted alternative and includes shipped pricing, condition, functionality, payment terms, and the requested comment-before-PM workflow.",
+      "requested_purchase": "Either a G Pro Superlight 2c or a WLMouse Huan.",
+      "offered_purchase": "Logitech G Pro X Superlight 2c for $70 shipped OBO; like-new, fully functional, with Pulsar black dot skates installed; PayPal Goods & Services only.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I’m looking to buy either a Superlight 2c or a WLMouse Huan.",
+          "supports": "Buyer accepts either of two alternatives, including a Superlight 2c."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Please comments before PM.",
+          "supports": "Buyer asks for comment before PM."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Looking to sell a few mice I'm no longer using. All are fully functional with no issues.",
+          "supports": "Listing-wide condition/functionality statement applicable to the offered mice."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "**Logitech G Pro X Superlight 2c — $70 shipped OBO**",
+          "supports": "Seller offers the matching mouse for sale and states the shipped price."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Like-new condition. Pulsar black dot skates installed.",
+          "supports": "Seller states the item condition and installed skates."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "PayPal Goods & Services only.",
+          "supports": "Seller states payment terms."
+        },
+        {
+          "id": "s5",
+          "source": "seller",
+          "quote": "Please comment before PM.",
+          "supports": "Seller requests the same contact workflow the buyer asked for."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "Interpreted the seller's Logitech G Pro X Superlight 2c as matching the buyer's requested Superlight 2c alternative."
+      ]
+    }
+  },
+  {
+    "id": "U12",
+    "input": {
+      "buyer_text": "[US-CA] [H] PayPal [W] G Pro Superlight 2c, WLMouse Huan\n\nI’m looking to buy either a Superlight 2c or a WLMouse Huan. Send me your offers. Please comments before PM. Thank you.",
+      "seller_text": "[US-MI] [H] 55g Magenta Logitech G Pro X Superlight w/ Kailh GM 8.0 [W] PayPal\n\nTimestamp and pictures: https://imgur.com/a/lw9wx7p\n\n\\[H\\] Magenta Logitech GPX Superlight\n\n* 55 grams with 3D printed base\n  * Perfect fit, 0 creaking\n* Kailh GM 8.0 Black switches\n  * 0 pre or post travel\n  * No play horizontally or vertically\n* Tiger Ice V2 dot skates\n  * Installed within last month\n* Adult owned, excellent condition, perfect example of a GPX Superlight\n  * Cleaned and sanitized, ready for next owner\n* Includes:\n  * Magenta Logitech GPX Superlight\n  * USB cable (not original)\n  * USB cable extender\n  * Mouse dongle\n  * Extra 3D printed base\n\n\\[W\\] PayPal\n\n* $80 Shipped SOLD"
+    },
+    "answer": {
+      "decision": "No Send",
+      "reason": "The buyer wants either a Superlight 2c or a WLMouse Huan. The seller offers a Magenta Logitech G Pro X Superlight, which is not identified as either requested model, and the listing also marks it SOLD.",
+      "requested_purchase": "Either a Superlight 2c or a WLMouse Huan.",
+      "offered_purchase": "Magenta Logitech G Pro X Superlight mouse, listed at $80 shipped, marked SOLD.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "I’m looking to buy either a Superlight 2c or a WLMouse Huan.",
+          "supports": "Buyer’s requested alternatives."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[US-MI] [H] 55g Magenta Logitech G Pro X Superlight w/ Kailh GM 8.0 [W] PayPal",
+          "supports": "Seller’s offered item identity."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "\\[H\\] Magenta Logitech GPX Superlight",
+          "supports": "Seller’s offered item identity in the body of the listing."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "* $80 Shipped SOLD",
+          "supports": "Seller marks the offered item as sold/unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U13",
+    "input": {
+      "buyer_text": "[WTB] XS Osprey Eja 48 L pack and thermarest neoair xlite short sleeping pad\n\n\\[WTB\\] XS Osprey Eja 48 L pack and thermarest neoair xlite short sleeping pad",
+      "seller_text": "[WTS] Thermarest neoair xlite short 7.2 oz\n\nSOLD SOLD SOLD\n\n​\n\nXlite short https://imgur.com/gallery/bCrzgtC\n\nNeoaire xlite torso length in good condition. No holes, patches or leaks. Some stains.  I'm moving to a large wide pad. Probably has 20 nights total on the pad.\n\n~~SOLD $65 shipped~~ paypal friends and family"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The seller's listing matches one of the buyer's listed wants—the Thermarest NeoAir Xlite short pad—but the seller explicitly marks it sold/unavailable. The Osprey Eja 48 pack is not offered here.",
+      "requested_purchase": "Thermarest NeoAir Xlite short sleeping pad (one of the buyer's listed wants)",
+      "offered_purchase": "Thermarest NeoAir Xlite short pad, explicitly sold",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB] XS Osprey Eja 48 L pack and thermarest neoair xlite short sleeping pad",
+          "supports": "Buyer lists an XS Osprey Eja 48 pack and a Thermarest NeoAir Xlite short sleeping pad as wanted items."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[WTS] Thermarest neoair xlite short 7.2 oz",
+          "supports": "Seller's item is the Thermarest NeoAir Xlite short pad, matching one of the buyer's listed wants."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "SOLD SOLD SOLD",
+          "supports": "Seller explicitly marks the item as sold/unavailable."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "~~SOLD $65 shipped~~ paypal friends and family",
+          "supports": "Seller again indicates the item is sold."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "Treated the buyer's post as listing separate wanted items, so a seller could qualify on the pad alone even without offering the pack."
+      ]
+    }
+  },
+  {
+    "id": "U14",
+    "input": {
+      "buyer_text": "[WTB] XS Osprey Eja 48 L pack and thermarest neoair xlite short sleeping pad\n\n\\[WTB\\] XS Osprey Eja 48 L pack and thermarest neoair xlite short sleeping pad",
+      "seller_text": "[WTS] Thermarest NeoAir XLite Regular Wide sleeping pad\n\nSHARED URL\nThermarest NeoAir XLite Sleeping Pad\nColor: Lemon Curry\nSize: Regular Wide\nI purchased this sleeping pad end of 2022 and only used it for two nights on one car camping trip. Few months later I got into a relationship and bought a double one that I use with my partner. Pad is basically brand new.\nPrice: $100 shipped via Paypal G&S. It will be shipped with USPS ground. Comment before PM please."
+    },
+    "answer": {
+      "decision": "No Send",
+      "reason": "The buyer specifically wants a Thermarest NeoAir XLite short sleeping pad, while the seller offers a Regular Wide version. The seller also does not offer the XS Osprey Eja 48 L pack.",
+      "requested_purchase": "Thermarest NeoAir XLite short sleeping pad; buyer also seeks an XS Osprey Eja 48 L pack.",
+      "offered_purchase": "Thermarest NeoAir XLite Regular Wide sleeping pad for $100 shipped via PayPal G&S.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[WTB] XS Osprey Eja 48 L pack and thermarest neoair xlite short sleeping pad",
+          "supports": "Buyer wants an XS Osprey Eja 48 L pack and a Thermarest NeoAir XLite short sleeping pad."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[WTS] Thermarest NeoAir XLite Regular Wide sleeping pad",
+          "supports": "Seller is offering a Thermarest NeoAir XLite Regular Wide sleeping pad."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Size: Regular Wide",
+          "supports": "Seller's sleeping pad size is Regular Wide, not short."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "The buyer's post lists two independent wants; this seller's offer is evaluated against the sleeping pad want because no pack is offered."
+      ]
+    }
+  },
+  {
+    "id": "U15",
+    "input": {
+      "buyer_text": "[WTB]\n\nLooking for thermarest neoair Xlite Nxt, or NEMO tensor.",
+      "seller_text": "[WTS] Nemo Tensor All Season. New\n\n\\[WTS\\] Nemo Tensor All Season. New\n\nPictures:\n\nURL\n\nRegular Wide: 19oz.\n\nNew in box Nemo Tensor All-Season Regular Wide.  $175 shipped.\n\nPayment via Venmo or PayPal. Buyer covers G&S fees. All items shipped via USPS ground with tracking within 24 hours. Shipping only within the USA. Thank you!"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer accepts either a Therm-a-Rest NeoAir Xlite NXT or a NEMO Tensor. The seller offers a Nemo Tensor All-Season, which satisfies the buyer's NEMO Tensor alternative, with no stated conflict with the buyer's terms.",
+      "requested_purchase": "Therm-a-Rest NeoAir Xlite NXT or a NEMO Tensor.",
+      "offered_purchase": "Nemo Tensor All-Season Regular Wide, new in box, for $175 shipped within the USA.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Looking for thermarest neoair Xlite Nxt, or NEMO tensor.",
+          "supports": "Buyer accepts either a Therm-a-Rest NeoAir Xlite NXT or a NEMO Tensor."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "New in box Nemo Tensor All-Season Regular Wide.  $175 shipped.",
+          "supports": "Seller offers the Nemo Tensor model variant, states condition, size, and price."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Payment via Venmo or PayPal. Buyer covers G&S fees. All items shipped via USPS ground with tracking within 24 hours. Shipping only within the USA. Thank you!",
+          "supports": "Seller's payment terms and shipping terms for the offered item."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U16",
+    "input": {
+      "buyer_text": "[WTB]\n\nLooking for thermarest neoair Xlite Nxt, or NEMO tensor.",
+      "seller_text": "[WTS] Nemo, Sea To Summit, Big Agnes sleeping pads.\n\n\\[WTS\\] Nemo, Sea To Summit, Big Agnes sleeping pads.\n\nhttps://imgur.com/a/xATlujL\n\nBig Agnes Rapide SL Regular 18oz, (20x72) $80\n\n~~SOLD:  Big Agnes Rapide SL Long 19oz~~\n\nSOLD: ~~Nemo Tensor Air Pad Regular~~\n\nThis pad is somewhat dirty but works perfectly.\n\nSea to Summit Ultralight Air Large. Pump sack not included 17oz,  $65\n\nAll pads hold air without any issues.\n\nPayment via Venmo or PayPal. Buyer covers G&S fees. All items shipped via USPS ground with tracking within 24 hours. Shipping only within the USA. Thank you!"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The buyer would accept either a Thermarest NeoAir Xlite NXT or a NEMO Tensor. The seller's only matching item is a NEMO Tensor, but it is explicitly marked sold, and no Thermarest NeoAir Xlite NXT is offered.",
+      "requested_purchase": "Thermarest NeoAir Xlite NXT or NEMO Tensor sleeping pad",
+      "offered_purchase": "Nemo Tensor Air Pad Regular, marked sold",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Looking for thermarest neoair Xlite Nxt, or NEMO tensor.",
+          "supports": "Buyer accepts either a Thermarest NeoAir Xlite NXT or a NEMO Tensor."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "SOLD: ~~Nemo Tensor Air Pad Regular~~",
+          "supports": "Seller's matching NEMO Tensor offer is explicitly sold/unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U17",
+    "input": {
+      "buyer_text": "[B] [USA-NC] Canon 5D Mark III body\n\nBudget is $700-$900. May be willing to stretch that if an 85mm lens is included",
+      "seller_text": "[S][USA-NY] Canon 5D Mark III with Tamron 45mm VC Lens $650 Shipped\n\n**For Sale: Canon 5D Mark III** in great condition, w/ 1 **Tamron 45mm VC** Prime lens, and necessary accessories for studio shooting\n**Shutter Count:** approx. **34,049**\n**Included:** Canon 5D III Body, Canon battery, body cap, (2) 'Jupio' (3rd-party) batteries, Canon LC-E6 wall charger, 'Tether Tools' USB-C tethering cable in black, Tamron SP 45mm f/1.8 Di VC USD Lens (Made in Japan!) in excellent condition (caps and hood inc.)\n**Price and Terms: $650** including everything shipped USPS to continental USA. I prefer a local meetup in NYC and willing to discount the price, but let's talk!\n**Timestamp:** https://imgur.com/a/canon-5diii-sale-06-04-2026-SCciOxc\n**Gallery:** https://imgur.com/a/canon-5d-iii-gallery-063DIt2\n**Other:** I'm happy to take more pics close-up and answer questions about its' condition. Please reply to this post, then meet me in Chat. My account is 2FA, so don't waste your time scammers!"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "The buyer wants a Canon 5D Mark III body within a $700-$900 budget, with willingness to stretch only for an included 85mm lens. The seller offers a Canon 5D Mark III body as part of a bundle with a Tamron 45mm lens and accessories for $650 shipped, which is within budget. The included 45mm lens is an extra, not a conflict, and there is no established disqualifying mismatch.",
+      "requested_purchase": "Canon 5D Mark III body",
+      "offered_purchase": "Canon 5D Mark III body bundled with a Tamron 45mm VC lens and accessories for $650 shipped",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[B] [USA-NC] Canon 5D Mark III body",
+          "supports": "Buyer wants a Canon 5D Mark III body."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Budget is $700-$900. May be willing to stretch that if an 85mm lens is included",
+          "supports": "Buyer's hard budget tops out at $900; 85mm lens only matters for stretching above budget."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[S][USA-NY] Canon 5D Mark III with Tamron 45mm VC Lens $650 Shipped",
+          "supports": "Seller is offering a Canon 5D Mark III in a bundle for $650 shipped."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "**For Sale: Canon 5D Mark III** in great condition, w/ 1 **Tamron 45mm VC** Prime lens, and necessary accessories for studio shooting",
+          "supports": "Seller confirms the body is for sale and describes its condition; the lens is bundled with it."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "**Shutter Count:** approx. **34,049**",
+          "supports": "Seller provides the camera's stated usage/test limit detail."
+        },
+        {
+          "id": "s4",
+          "source": "seller",
+          "quote": "**Included:** Canon 5D III Body, Canon battery, body cap, (2) 'Jupio' (3rd-party) batteries, Canon LC-E6 wall charger, 'Tether Tools' USB-C tethering cable in black, Tamron SP 45mm f/1.8 Di VC USD Lens (Made in Japan!) in excellent condition (caps and hood inc.)",
+          "supports": "Seller lists the included contents of the offered purchase."
+        },
+        {
+          "id": "s5",
+          "source": "seller",
+          "quote": "**Price and Terms: $650** including everything shipped USPS to continental USA. I prefer a local meetup in NYC and willing to discount the price, but let's talk!",
+          "supports": "Seller states the price, shipping coverage/method, and optional local meetup/discount terms."
+        },
+        {
+          "id": "s6",
+          "source": "seller",
+          "quote": "**Other:** I'm happy to take more pics close-up and answer questions about its' condition. Please reply to this post, then meet me in Chat. My account is 2FA, so don't waste your time scammers!",
+          "supports": "Seller gives the applicable contact workflow and invites questions/pictures."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U18",
+    "input": {
+      "buyer_text": "[B] [USA-NC] Canon 5D Mark III body\n\nBudget is $700-$900. May be willing to stretch that if an 85mm lens is included",
+      "seller_text": "[S][USA-NY] Canon 5D MKIII w/ Battery Grip and more\n\nHi all, selling my Canon 5D MKIII setup. Willing to meet locally in NYC or I'll cover shipping to anywhere in the CONUS. This sale will include:\n\n* Canon 5D Mark III Body\n* Green Extreme BG-E20 Battery Grip\n* 2x Li-ion batteries and Canon Li-ion battery pack charger\n* 1 SanDisk Extreme Pro 64GB CompactFlash card, 160MB/s\n* 1 SanDisk Extreme 64GB CompactFlash card, 120MB/s\n* Original box\n\nTimestamp and additional photos: https://imgur.com/a/Szg1bCP\n\nAsking price is $750 SOLD to r/SammichParade - shipped today!\n\n​\n\nEdit for updated price"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The seller offers a Canon 5D Mark III body as part of a $750 bundle, which fits the buyer's main item request and budget, but the listing explicitly says it is sold and shipped, so the offer is unavailable.",
+      "requested_purchase": "Canon 5D Mark III body, budget up to $900; optionally with an 85mm lens if stretching higher.",
+      "offered_purchase": "Canon 5D Mark III bundle with body, battery grip, batteries/charger, CF cards, and original box for $750, but sold.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[B] [USA-NC] Canon 5D Mark III body",
+          "supports": "Buyer wants a Canon 5D Mark III body."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Budget is $700-$900. May be willing to stretch that if an 85mm lens is included",
+          "supports": "Buyer's hard budget is up to $900 for the body request; higher stretch is only tied to an included 85mm lens."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Hi all, selling my Canon 5D MKIII setup.",
+          "supports": "Seller is offering a Canon 5D Mark III setup."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "* Canon 5D Mark III Body",
+          "supports": "The offered bundle includes the requested camera body."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "Asking price is $750 SOLD to r/SammichParade - shipped today!",
+          "supports": "The offered bundle was priced within budget but is explicitly sold and unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "Canon 5D MKIII and Canon 5D Mark III refer to the same camera model."
+      ]
+    }
+  },
+  {
+    "id": "U19",
+    "input": {
+      "buyer_text": "[B] [USA-MI] Ricoh GR IIIX\n\nLooking for a GR IIIx   \nBudget is 900$ shipped 😁",
+      "seller_text": "[S][USA-PA] Ricoh gr iiix\n\nPurchased in May 2026, shutter count 1258\n\nComes with lens cap, 2 extra batteries, charger, wrist strap\n\nEverything works perfectly. Screen and lens are flawless.\n\nEsthetic: one very small (1mm x 2mm) paint chip on one edge (see photo). No dent in metal body, it's only paint that is missing\n\n$1100 shipped to US\n\nhttps://imgur.com/a/ricoh-gr-iii-x-bgpVEJb"
+    },
+    "answer": {
+      "decision": "No Send",
+      "reason": "The buyer wants a Ricoh GR IIIx with a budget of $900 shipped. The seller is offering a Ricoh GR IIIx shipped to the US, but at $1100 shipped, which exceeds the buyer's stated budget.",
+      "requested_purchase": "Ricoh GR IIIx for up to $900 shipped",
+      "offered_purchase": "Ricoh GR IIIx with lens cap, 2 extra batteries, charger, and wrist strap for $1100 shipped to US",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Looking for a GR IIIx",
+          "supports": "Buyer wants a Ricoh GR IIIx."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Budget is 900$ shipped 😁",
+          "supports": "Buyer's stated shipped budget is $900."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[S][USA-PA] Ricoh gr iiix",
+          "supports": "Seller is offering a Ricoh GR IIIx."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Comes with lens cap, 2 extra batteries, charger, wrist strap",
+          "supports": "Seller states what is included with the camera."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "$1100 shipped to US",
+          "supports": "Seller's asking price is $1100 shipped to the US, which is above the buyer's budget."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U20",
+    "input": {
+      "buyer_text": "[B] [USA-MI] Ricoh GR IIIX\n\nLooking for a GR IIIx   \nBudget is 900$ shipped 😁",
+      "seller_text": "[S] [USA-MA] Ricoh GR iiix Kit\n\nLooking to find another home for my GR iiix (ND, not HDF) and its accessories; I haven’t used it quite as much as I had hoped and have my eye on other gear.\n\nTimestamp & Photos:\nURL\n\nPaypal G&S with USPS tracked, insured, and Signature Required Delivery only.\n\n~~Ricoh GR iiix w/ Extras - $1,000 + Shipping~~\n\n**SOLD to u/No-Ad-2133 for $950 shipped**\n\n- Purchased Open Box from Adorama in November of 2024\n- 2120 Shutter Count\n- OEM DB-110 Battery\n- OEM USB-A/C Cable\n- OEM AC/USB-A Wall Adapter\n- All OEM Packaging & Paperwork\n- NiSi PR-1x 49mm Lens Filter Adapter\n- Ulbter Glass Screen Protector (One applied after unboxing, two spares)\n- Sandisk Ultra Plus 128gb SDXC Card\n- (2) Wasabi Power DB-110 Replacement Batteries\n- Wasabi Power Two Bay DB-110 Charger\n- National Geographic Pouch"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The seller offered the requested camera model, but that offer is explicitly sold/unavailable. It also exceeds the buyer’s hard budget of $900 shipped.",
+      "requested_purchase": "Ricoh GR IIIx for up to $900 shipped",
+      "offered_purchase": "Ricoh GR iiix w/ extras kit at $1,000 + shipping, marked sold",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Looking for a GR IIIx   ",
+          "supports": "Buyer wants a Ricoh GR IIIx."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "Budget is 900$ shipped 😁",
+          "supports": "Buyer's maximum budget is $900 shipped."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Looking to find another home for my GR iiix (ND, not HDF) and its accessories;",
+          "supports": "Seller's item is a Ricoh GR iiix kit."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "~~Ricoh GR iiix w/ Extras - $1,000 + Shipping~~",
+          "supports": "Seller's offered price was $1,000 plus shipping, above the buyer's $900 shipped maximum."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "**SOLD to u/No-Ad-2133 for $950 shipped**",
+          "supports": "The offered item is explicitly sold and unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U21",
+    "input": {
+      "buyer_text": "[US-OH] [H] Paypal [W] GMK Olivia 1, 2, or 3 Keycap set, Olivia Artisans, Etc.\n\n\\[US-OH\\] \\[H\\] Paypal \\[W\\] GMK Olivia 1, 2, or 3 Keycap set, GMK Olivia Artisans, Etc.\n\nLooking for GMK Olivia Keycap Sets, GMK Olivia Artisans and Anything Olivia Colors.\n\nFor the keycap set I would like new/unused. It’s fine if it’s packaging was opened.",
+      "seller_text": "[US-GA] [H] GMK Olivia++ and spacebars [W] Rama Kara and weight\n\ntimestamp \n\nMe 5 months ago: “nah i don’t need a Kara”\n\nMe now: [US-GA] [H] GMK Olivia++ and spacebars [W] Rama Kara and weight\n\nBarely used. Been sitting in this plastic bin for a while now.\n\nNOT LOOKING TO SELL AT THIS TIME.\n\nLooking for any color but soya or moon. If you have other extras I’ll consider adding PayPal.\n\nPlease comment before PM. You can click the link provided by the bot.\n\nThanks!"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The seller is not offering this item for sale and instead wants a trade, so the buyer cannot purchase it with PayPal. The seller also describes the keycap set as used, while the buyer wants a new/unused keycap set.",
+      "requested_purchase": "A GMK Olivia keycap set (1, 2, or 3), preferably new/unused though opened packaging is okay; also interested in GMK Olivia artisans or other Olivia-color items.",
+      "offered_purchase": "GMK Olivia++ and spacebars, offered for trade for a Rama Kara and weight, not for sale.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Looking for GMK Olivia Keycap Sets, GMK Olivia Artisans and Anything Olivia Colors.",
+          "supports": "Buyer wants GMK Olivia keycap sets, artisans, or other Olivia-color items."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "For the keycap set I would like new/unused. It’s fine if it’s packaging was opened.",
+          "supports": "Buyer requires a keycap set to be new/unused; opened packaging is acceptable."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "[US-GA] [H] GMK Olivia++ and spacebars [W] Rama Kara and weight",
+          "supports": "Seller's offered item is GMK Olivia++ and spacebars, and the seller wants a Rama Kara and weight in trade."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "Barely used. Been sitting in this plastic bin for a while now.",
+          "supports": "Seller states the offered item is used, not new/unused."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "NOT LOOKING TO SELL AT THIS TIME.",
+          "supports": "Seller explicitly says the item is not available for sale."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U22",
+    "input": {
+      "buyer_text": "[US-OH] [H] Paypal [W] GMK Olivia 1, 2, or 3 Keycap set, Olivia Artisans, Etc.\n\n\\[US-OH\\] \\[H\\] Paypal \\[W\\] GMK Olivia 1, 2, or 3 Keycap set, GMK Olivia Artisans, Etc.\n\nLooking for GMK Olivia Keycap Sets, GMK Olivia Artisans and Anything Olivia Colors.\n\nFor the keycap set I would like new/unused. It’s fine if it’s packaging was opened.",
+      "seller_text": "[CA-ON] [H] GMK Olivia Light, GMK Modo R1, Realforce R1 cable, SA 1965 TKL [W] Paypal\n\n[CA-ON] [H] GMK Olivia Light, GMK Modo R1, Realforce R1 cable, SA 1965 TKL [W] Paypal\n\nTimestamps\n\nPrices are in USD and includes shipping in CONUS. +Extra everywhere else.\n\n| H                      | Notes                                                                                                                                                                                                                                                                      | Price         |\n| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |\n| ~~GMK Olivia++ Light~~ | ~~Sealed. Base~~                                                                                                                                                                                                                                                           | ~~$310~~ SOLD |\n| ~~GMK Modo R1 Base~~   | ~~Used with some shine on the alphas and 7u spacebar. Base kit from R1 GB. pics~~                                                                                                                                                                            | ~~$280~~ SOLD |\n| Realforce R1 Cable     | Red custom cable. Brand new. I do not know if it will fit R2                                                                                                                                                                                                               | $40 shipped   |\n| SA 1965 TKL kit        | Bought here on /r/mm. Great condition. I don't notice any defects. Only used them on my CA66. SA profile not my cup of tea. Includes 4 blank 1.75u shift keys that I bought separately. It is    a shade lighter than the set's browns. Shipped in bags. pic | $120 shipped  |\n\nWants: Money, KBD8X Mkii carbon fibre or fr4 plate\n\nPlease comment to verify your account."
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The buyer wants a GMK Olivia keycap set or other Olivia-themed items, and for a keycap set wants it new/unused. The seller’s only matching Olivia item is a sealed GMK Olivia++ Light base kit, which would meet the condition preference, but it is explicitly marked sold and therefore unavailable.",
+      "requested_purchase": "A GMK Olivia keycap set (1, 2, or 3), preferably new/unused, or alternatively GMK Olivia artisans / other Olivia-color items.",
+      "offered_purchase": "GMK Olivia++ Light Base, sealed, but sold.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "Looking for GMK Olivia Keycap Sets, GMK Olivia Artisans and Anything Olivia Colors.",
+          "supports": "Buyer wants GMK Olivia sets, artisans, or other Olivia-color items."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "For the keycap set I would like new/unused. It’s fine if it’s packaging was opened.",
+          "supports": "Buyer wants a keycap set to be new/unused."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "| ~~GMK Olivia++ Light~~ | ~~Sealed. Base~~                                                                                                                                                                                                                                                           | ~~$310~~ SOLD |",
+          "supports": "Seller’s matching Olivia keycap set is sealed/base, but explicitly sold and unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": [
+        "GMK Olivia++ Light Base is an Olivia keycap set relevant to the buyer’s request."
+      ]
+    }
+  },
+  {
+    "id": "U23",
+    "input": {
+      "buyer_text": "[US-CA][H] PayPal [W] GMK Metaverse (Base) GMK Dracula (Base) GMK Apollo (Base) USED\n\n[US-CA][H] PayPal [W] GMK Metaverse (Base) GMK Dracula (Base) GMK Apollo (Base) USED + various switches\n\n\nI’m specifically looking for used sets doesn’t matter what condition with shine or whatever. Will purchase for the right price. Can literally be trashed pizza grease cheetos dust keycaps whatever.\n\n\nFeel free to let me know what other used  gmk sets you have besides the listed ones.",
+      "seller_text": "[US-NY][H] GMK Botanical R2, Dracula V2, GMK WoB, S-Craft Mega-Gengar Shiny Umbreon, Rama x Redline Start Stop [W] Paypal, Cash Local\n\n# [US-NY][H] GMK Botanical R2, Dracula V2, GMK WoB, S-Craft Mega-Gengar Shiny Umbreon, Rama x Redline Start Stop [W] Paypal, Cash Local\n\nSelling\n\nClearing out some items\n\nPaypal, US Shipping, Cash Local Preferred\n\nTimestamp\n\n| Items                                       | Condition      | Price shipped |\n| ------------------------------------------- | -------------- | ------------- |\n|                                             |                |               |\n| GMK Botanical R2 Base                       | BNIB           | $95 OBO       |\n| GMK WoB Base                                | Used           | $80 OBO       |\n| ~~GMK Dracula V2.0 Base~~                   | ~~BNIB~~       | ~~$SOLD~~     |\n| ~~GMK Belafonte~~                           | ~~Used~~       | ~~$8OLD~~     |\n| S-Craft Keys Mega Gengar                    | New(unmounted) | $120 OBO      |\n| S-Craft Keys Shiny Umbreon                  | New(Unmounted) | $200 OBO      |\n| GMK Redline x Rama Start Stop Metal Artisan | New(Unmounted) | $90 OBO       |"
+    },
+    "answer": {
+      "decision": "Send",
+      "reason": "Buyer is specifically seeking used GMK base sets and is also open to other used GMK sets beyond the named Metaverse/Dracula/Apollo options. Seller offers a used GMK WoB Base for $80 OBO, with shipped pricing and US shipping, so this matches an accepted alternative with no established conflict.",
+      "requested_purchase": "Used GMK base set, specifically Metaverse/Dracula/Apollo, or another used GMK set.",
+      "offered_purchase": "GMK WoB Base, used, $80 OBO shipped.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[US-CA][H] PayPal [W] GMK Metaverse (Base) GMK Dracula (Base) GMK Apollo (Base) USED",
+          "supports": "Buyer specifically wants used GMK Metaverse, Dracula, or Apollo base sets."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "I’m specifically looking for used sets doesn’t matter what condition with shine or whatever. Will purchase for the right price. Can literally be trashed pizza grease cheetos dust keycaps whatever.",
+          "supports": "Buyer requires used condition and is flexible on wear/condition."
+        },
+        {
+          "id": "b3",
+          "source": "buyer",
+          "quote": "Feel free to let me know what other used  gmk sets you have besides the listed ones.",
+          "supports": "Buyer explicitly accepts other used GMK sets as alternatives."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "Paypal, US Shipping, Cash Local Preferred",
+          "supports": "Seller accepts PayPal, offers US shipping, and notes local cash is preferred."
+        },
+        {
+          "id": "s2",
+          "source": "seller",
+          "quote": "| Items                                       | Condition      | Price shipped |",
+          "supports": "Seller states the table prices are shipped prices."
+        },
+        {
+          "id": "s3",
+          "source": "seller",
+          "quote": "| GMK WoB Base                                | Used           | $80 OBO       |",
+          "supports": "Seller offers the GMK WoB Base in used condition for $80 OBO."
+        }
+      ],
+      "seller_note_ids": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  },
+  {
+    "id": "U24",
+    "input": {
+      "buyer_text": "[US-CA][H] PayPal [W] GMK Metaverse (Base) GMK Dracula (Base) GMK Apollo (Base) USED\n\n[US-CA][H] PayPal [W] GMK Metaverse (Base) GMK Dracula (Base) GMK Apollo (Base) USED + various switches\n\n\nI’m specifically looking for used sets doesn’t matter what condition with shine or whatever. Will purchase for the right price. Can literally be trashed pizza grease cheetos dust keycaps whatever.\n\n\nFeel free to let me know what other used  gmk sets you have besides the listed ones.",
+      "seller_text": "[US-NY] [H] GMK Dracula, KAT Space Cadet, BNIB J-01 Rev1 Red w/ logo, PC Bear65 with extras, Keyporas, Shishis, Keycult artisan, Archetype clifford, space goblin, other artisans, accessories [W] Paypal, Local Cash\n\nTimestamp\n\nHi all. Selling some stuff to raise funds for life stuff (paying them student loans to name one of them). Lot of boards and keysets I'll probably never get around to building and using before I eventually retire from the hobby. Better for them to find a new home. Below is what I have to offer. Open to offers beside the price listed as well as long as they aren't super lowballing. My prices are already super low as is.\n\nBoards:\n\n| Name      | Description                                                                                                   | Price                                    |\n| --------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |\n| j-01 rev1 | Red w/ 8 macro keys and logo. BNIB. Includes extra fr4 plate and pcb, Includes all accessories it comes with. | ~~675 shipped~~ Unavailable at this time |\n| PC Bear65 | BNIB. With engraving. Brass plate, extra ewhite plate, and extra pcb included, All accessories included.      | ~~650 shipped~~  Pending local sale      |\n\nKeysets\n\n| GMK Dracula     | Brand new. Base kit + minify. Only opened base kit to check for defects. minify kit still sealed. Not being sold separately | ~~280 shipped~~ SOLD |\n| --------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------- |\n| KAT Space Cadet | BNIB. Gray Alphas + 60s Mods + spacebars                                                                                    | ~~160 shipped~~ SOLD |\n\nArtisans:\n\n​\n\n| Archetype Space Goblin Villain | A3                                     | New, never mounted, incudes keychain | 230 shipped OBO         |\n| ------------------------------ | -------------------------------------- | ------------------------------------ | ----------------------- |\n| Archetype WoB Clifford         | A2                                     | New, never mounted                   | ~~120 shipped~~ Pending |\n| Keyforge Arctic Shishi         | B3                                     | New, never mounted                   | 100 shipped             |\n| Keyforge Last Laugh Shishi     | B2                                     | New, never mounted                   | 150 shipped             |\n| Bushido Keypora                | C4                                     | New, never mounted                   | ~~200 shipped~~ SOLD    |\n| Paymate Keypora                | C3                                     | New, never mounted                   | ~~105 shipped~~ SOLD    |\n| Beigedoll Keypora              | C1                                     | New, never mounted                   | 100 shipped             |\n| Teh Tarik Keypora              | B1                                     | New, never mounted                   | 80 shipped              |\n| Keycult Artisan                | Brass with white infill. new, unopened | 110 shipped                          |                         |\n\n​"
+    },
+    "answer": {
+      "decision": "Reject",
+      "reason": "The buyer wants used GMK Metaverse/Dracula/Apollo base kits, and is also open to other used GMK sets. The seller's only direct overlap is GMK Dracula, but that listing is explicitly marked SOLD and is described as brand new rather than used.",
+      "requested_purchase": "Used GMK Metaverse (Base), GMK Dracula (Base), or GMK Apollo (Base); buyer is also open to other used GMK sets and mentions various switches.",
+      "offered_purchase": "GMK Dracula base kit + minify, described as brand new with base opened only to check for defects, not sold separately, marked SOLD.",
+      "evidence": [
+        {
+          "id": "b1",
+          "source": "buyer",
+          "quote": "[US-CA][H] PayPal [W] GMK Metaverse (Base) GMK Dracula (Base) GMK Apollo (Base) USED",
+          "supports": "Buyer wants GMK Metaverse, GMK Dracula, or GMK Apollo base kits, specifically used."
+        },
+        {
+          "id": "b2",
+          "source": "buyer",
+          "quote": "I’m specifically looking for used sets doesn’t matter what condition with shine or whatever.",
+          "supports": "Buyer explicitly prefers used sets and is flexible on condition."
+        },
+        {
+          "id": "b3",
+          "source": "buyer",
+          "quote": "Feel free to let me know what other used  gmk sets you have besides the listed ones.",
+          "supports": "Buyer is also open to other used GMK sets beyond the named ones."
+        },
+        {
+          "id": "s1",
+          "source": "seller",
+          "quote": "| GMK Dracula     | Brand new. Base kit + minify. Only opened base kit to check for defects. minify kit still sealed. Not being sold separately | ~~280 shipped~~ SOLD |",
+          "supports": "Seller's matching GMK Dracula offer is base kit + minify, described as brand new, and explicitly SOLD/unavailable."
+        }
+      ],
+      "seller_note_ids": [],
+      "system_notes": [],
+      "unresolved": [],
+      "assumptions": []
+    }
+  }
+]
