@@ -67,6 +67,43 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(args[3], 8)
         self.assertEqual(args[4], REQUEST)
 
+    def test_bicycle_fallback_and_craigslist_reaches_reader(self):
+        request = 'Item: LL Bean Sport Cruiser 7 Bicycle\nBudget: 135\nBudget currency: USD'
+        ad = 'https://boston.craigslist.org/gbs/bik/d/arlington-ll-bean-sport-cruiser/1234567890.html'
+        car = {'href': 'https://bringatrailer.com/listing/2007-subaru-outback-8/', 'title': '2007 Subaru Outback wagon', 'body': 'Used automobile for sale'}
+        bike = {'href': ad, 'title': 'LL Bean Sport Cruiser 7 Bicycle', 'body': '$135 Arlington'}
+        self.s['ddg_text'] = MagicMock(return_value=[car])
+        engine = MagicMock()
+        engine.text.return_value = [bike]
+        self.s['DDGS'] = MagicMock(return_value=engine)
+        self.s['read_listing_html'] = MagicMock(return_value='<html><body>LL Bean Sport Cruiser 7 Bicycle. For sale. Asking price: $135. Contact seller in Arlington. Seven speed bicycle with brakes and tires in good condition. Local pickup available by arrangement. Please reply to this ad to arrange viewing.</body></html>')
+        result = self.s['search_listings'](request, {}, buyer_text=request)
+        self.assertTrue(any(r['url'] == ad and r['qualifying'] for r in result['listings']))
+        self.assertEqual([c.args[0] for c in self.s['read_listing_html'].call_args_list], [ad])
+        self.assertTrue(any('not opened' in r['reason'] for r in result['skipped']))
+        texts = [c.args[0] for c in self.s['ddg_text'].call_args_list]
+        self.assertIn('LL Bean Sport Cruiser 7 Bicycle site:craigslist.org', texts)
+        self.assertTrue(all(c.kwargs['backend'] == 'google' for c in engine.text.call_args_list))
+
+    def test_fallback_failure_is_bounded_and_preserves_original_queries(self):
+        self.s['ddg_text'] = MagicMock(return_value=[])
+        engine = MagicMock()
+        engine.text.side_effect = RuntimeError('provider unavailable')
+        self.s['DDGS'] = MagicMock(return_value=engine)
+        self.s['expand_candidates'] = MagicMock(return_value=([], ''))
+        self.s['search_listings']('Item: LL Bean Sport Cruiser 7 Bicycle', {})
+        self.assertEqual(engine.text.call_count, 2 * self.s['ddg_text'].call_count)
+        self.assertEqual({c.kwargs['backend'] for c in engine.text.call_args_list}, {'google', 'bing'})
+
+    def test_partial_product_and_sparse_profile_are_not_discarded(self):
+        from live_matches_discovery import unrelated
+        for row in [
+            {'title': 'Schwinn Sport Cruiser 7', 'body': 'Used bike good condition'},
+            {'title': 'Seller', 'body': '', 'href': 'https://www.facebook.com/marketplace/profile/123'},
+            {'title': 'LL Bean Bicycle', 'body': 'Collection available locally'},
+        ]:
+            self.assertFalse(unrelated(row, 'LL Bean Sport Cruiser 7 Bicycle'))
+
     def test_explicit_price_beyond_old_excerpt_limit(self):
         text = '<html><body>Fender ST62 Buy It Now. ' + ('description ' * 80) + '. Asking price: $925.00</body></html>'
         result = self.s['inspect_listing_html'](text, 'Fender ST62', 'https://reverb.com/item/123-example')

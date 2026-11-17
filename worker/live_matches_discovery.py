@@ -1,6 +1,6 @@
 """Consumer-only discovery corrections; no changes to the frozen worker or V2."""
 import re
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote
 
 
 def requirement_text(request):
@@ -29,6 +29,26 @@ def item_identity(url):
         match = re.search(r'/marketplace/item/(\d+)', parts.path)
         if match:return ('facebook', match.group(1))
     return ('url', url)
+
+
+# Retrieval hints only: never establish product identity or qualification.
+def product_words(text):
+    stop = {'for', 'sale', 'wanted', 'buy', 'used', 'new', 'working', 'good', 'condition', 'the', 'and', 'with'}
+    return {w for w in re.findall(r'[a-z0-9]+', (text or '').lower()) if len(w) > 2 and w not in stop}
+
+
+def candidate_hits(row, item):
+    url = row.get('url') or row.get('href') or ''
+    text = ' '.join(str(row.get(k) or '') for k in ('title', 'body'))
+    text += ' ' + unquote(urlsplit(url).path)
+    return len(product_words(item) & product_words(text))
+
+
+def unrelated(row, item):
+    # Only discard descriptive results with ZERO product-word overlap.
+    # Sparse snippets and partial/variant names remain eligible for reading.
+    text = ' '.join(str(row.get(k) or '') for k in ('title', 'body'))
+    return len(product_words(item)) >= 2 and len(product_words(text)) >= 3 and candidate_hits(row, item) == 0
 
 
 def install(scope):
@@ -87,13 +107,29 @@ def install(scope):
         item = scope['requested_item'](request)
         requirements = requirement_text(request)
         queries = [template.format(query=item) for template in scope['LISTING_QUERIES']]
+        queries.insert(1, f'{item} site:craigslist.org')
         if requirements:
             queries.insert(0, f'{item} {requirements} for sale')
         groups = [];skipped = []
         for text in dict.fromkeys(queries):
             print('    Listing search: ' + text, flush=True)
-            rows = scope['ddg_text'](text, max_results=10)
-            groups.append(scope['listing_seeds'](rows, 10, skipped))
+            rows = list(scope['ddg_text'](text, max_results=10))
+            if not any(candidate_hits(row, item) for row in rows):
+                # Same query; bounded public backend fallback, no model calls.
+                for engine in ('google', 'bing'):
+                    try:
+                        extra = list(scope['DDGS'](timeout=10).text(text, max_results=10, backend=engine))
+                        print(f'    Public search fallback {engine}: {len(extra)} raw results', flush=True)
+                        rows.extend(extra)
+                        if any(candidate_hits(row, item) for row in extra):break
+                    except Exception as exc:
+                        print(f'    Public search fallback {engine} unavailable: {exc}', flush=True)
+            eligible = []
+            for row in rows:
+                if unrelated(row, item):
+                    scope['_note_skip'](skipped, row.get('href') or '', 'no requested-product evidence in descriptive search result; not opened')
+                else:eligible.append(row)
+            groups.append(scope['listing_seeds'](eligible, 30, skipped))
             scope['time'].sleep(scope['SEARCH_DELAY'])
         seeds = [];seen_ids = set()
         while any(groups):
@@ -110,10 +146,12 @@ def install(scope):
             direct = scope['is_item_page'](seed['url']) and not scope['is_catalog_page'](seed['url'])
             text = (str(seed.get('title') or '') + ' ' + str(seed.get('body') or '')).lower()
             hits = sum(word in text for word in words)
-            return (0 if direct else 1, -hits)
+            return (-candidate_hits(seed, item), 0 if direct else 1, -hits)
         seeds.sort(key=priority)
         listings, incomplete = scope['expand_candidates'](
             seeds, item, scope['read_listing_html'], scope['PAGE_BUDGET'], request, scope['MATCH_TARGET'], skipped)
+        for seed in seeds:
+            print('    Discovery candidate: ' + seed['url'], flush=True)
         for skipped_item in skipped:
             print(f"    Skipped {skipped_item['url']} — {skipped_item['reason']}")
         listings = [row for row in listings if not (scope['is_seen'](seen, row.get('url') or '') and row.get('availability') != 'available')]
