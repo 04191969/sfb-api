@@ -130,6 +130,13 @@ class PublicSearchBrowser(Browser):
             row['request_counts'] = self.counters()
             (self.folder / 'TRACE.json').write_text(json.dumps(self.trace, indent=2), encoding='utf-8')
 
+    def rendered_search(self, query):
+        """Same query and original rendered Bing route; existing limits apply."""
+        self.boundary()
+        if 'www.bing.com' in self.held_hosts or 'bing.com' in self.held_hosts:
+            raise SiteBlocked('Previously held Bing host')
+        return super().search(query)
+
     def search(self, query):
         try:
             return self.bing_document_search(query)

@@ -55,11 +55,17 @@ class CandidateNavigationMixin:
         super().__init__(*args, **kwargs)
         self.buyer_screen = BuyerNavigationScreen(self.buyer_screen)
         self.product_groups = None
+        self.unresolved_searches = []
 
     def discover_seller(self, queries, buyer):
         self.product_groups = product_groups(queries)
+        self.unresolved_searches = []
         try:
-            return super().discover_seller(queries, buyer)
+            seller = super().discover_seller(queries, buyer)
+            if seller is None and self.unresolved_searches:
+                self.r.update(state='search_extraction_failed', reason='Search incomplete: both document-only and rendered Bing returned results without requested-product evidence. This does not establish that no sellers exist.')
+                self.persist()
+            return seller
         finally:
             self.product_groups = None
 
@@ -67,6 +73,22 @@ class CandidateNavigationMixin:
         rows = super().search(query, purpose)
         if purpose != 'seller' or self.product_groups is None:
             return rows
+        def relevant(row):
+            evidence = terms(row.get('title', '') + ' ' + row.get('snippet', ''))
+            return any(group <= evidence for group in self.product_groups)
+        raw_count = len(rows)
+        if rows and not any(relevant(row) for row in rows) and hasattr(self.browser, 'rendered_search'):
+            self.event('Retrying unproductive search in rendered Bing', query=query,
+                       reason='Document-only results lack requested-product evidence')
+            rendered = self.browser.rendered_search(query)
+            self.r['searches'].append(dict(purpose=purpose, query=query,
+                retrieval='rendered_bing_fallback', results=rendered))
+            raw_count += len(rendered)
+            seen = {row['url'] for row in rows}
+            rows = rows + [row for row in rendered if row['url'] not in seen]
+            if not any(relevant(row) for row in rendered):
+                self.unresolved_searches.append(query)
+                self.event('Search relevance unresolved', query=query)
         kept = []
         for row in rows:
             evidence = terms(row.get('title', '') + ' ' + row.get('snippet', ''))
@@ -79,5 +101,8 @@ class CandidateNavigationMixin:
                 outcome='pre_navigation_skip', matched_rule='requested_product_evidence',
                 reason='Title/snippet does not establish the requested product; generic query overlap is insufficient',
                 required_product_groups=[sorted(g) for g in self.product_groups]))
+        # The inherited loop adds retained rows. Include raw rejected/duplicate
+        # rows here so returned_rows is the actual retrieval count.
+        self.r['seller_counts']['returned_rows'] += raw_count - len(kept)
         self.persist()
         return kept

@@ -64,4 +64,30 @@ class CandidateTests(unittest.TestCase):
         self.assertIsNone(r.discover_seller(['CD player for sale'],{'url':'https://example.com/wtb'}))
         self.assertEqual(r.browser.visits,[])
 
+
+class RetrievalRetryTests(CandidateTests):
+    def test_exact_query_retry_can_recover_real_offer(self):
+        from unittest.mock import Mock
+        r=self.run_fixture([dict(url='https://example.com/dictionary/cd',title='CD rates')])
+        r.browser.rendered_search=Mock(return_value=[dict(url='https://example.com/listing/1',title='Sony CD player for sale',snippet='$75')])
+        q='CD player for sale'
+        seller=r.discover_seller([q],{'url':'https://example.com/wtb'})
+        self.assertEqual(seller['url'],'https://example.com/listing/1')
+        r.browser.rendered_search.assert_called_once_with(q)
+        self.assertEqual(r.r['seller_counts']['returned_rows'],2)
+        self.assertEqual(r.browser.visits,['https://example.com/listing/1'])
+    def test_relevant_document_results_do_not_retry(self):
+        from unittest.mock import Mock
+        r=self.run_fixture([dict(url='https://example.com/listing/1',title='Sony CD player for sale')])
+        r.browser.rendered_search=Mock()
+        r.discover_seller(['CD player for sale'],{'url':'https://example.com/wtb'})
+        r.browser.rendered_search.assert_not_called()
+    def test_both_irrelevant_report_incomplete(self):
+        from unittest.mock import Mock
+        r=self.run_fixture([dict(url='https://example.com/a',title='working definition')])
+        r.browser.rendered_search=Mock(return_value=[dict(url='https://example.com/b',title='working definition')])
+        self.assertIsNone(r.discover_seller(['CD player for sale'],{'url':'https://example.com/wtb'}))
+        self.assertEqual(r.r['state'],'search_extraction_failed')
+        self.assertEqual(r.browser.visits,[])
+
 if __name__=='__main__':unittest.main()
