@@ -9,12 +9,38 @@ foreach ($entry in $manifest.PSObject.Properties) {
     $actual = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $entry.Value) { throw "Package differs: $($entry.Name). Worker was not stopped." }
 }
-$key = [Environment]::GetEnvironmentVariable('SUPABASE_KEY', 'User')
-if (!$key) { throw 'Supabase credential missing from user environment. Worker was not stopped.' }
+$python = "C:\Users\drjul\AppData\Local\Python\pythoncore-3.14-64\python.exe"
+if (!(Test-Path $python)) { $python = 'python.exe' }
+$oldKey = $env:SUPABASE_KEY
 try {
-    $rows = Invoke-RestMethod -Uri 'https://fyxglozykvhrfejrcrqz.supabase.co/rest/v1/seeker_runs?select=id,status&status=in.(pending,running)' -Headers @{apikey=$key;Authorization="Bearer $key"}
-} catch { throw 'Could not verify queue state. Worker was not stopped.' }
-if (@($rows).Count -gt 0) { throw 'Pending or running jobs exist. Worker was not stopped. Review the run status first.' }
+    $env:SUPABASE_KEY = [Environment]::GetEnvironmentVariable('SUPABASE_KEY', 'User')
+    $check = @'
+import json, os, sys
+try:
+    from supabase import create_client
+    key = os.environ.get('SUPABASE_KEY', '').strip()
+    if not key:
+        print('Missing user credential. Worker was not stopped.')
+        sys.exit(2)
+    url = os.environ.get('SUPABASE_URL', 'https://fyxglozykvhrfejrcrqz.supabase.co').strip()
+    sb = create_client(url, key)
+    rows = sb.table('seeker_runs').select('id,status').in_('status', ['pending', 'running']).limit(1).execute().data
+    if rows:
+        print('Pending or running jobs exist. Worker was not stopped.')
+        sys.exit(3)
+    print('Queue verified using the worker Supabase client.')
+except Exception as exc:
+    code = getattr(exc, 'code', None)
+    safe_code = str(code) if str(code).isalnum() and len(str(code)) <= 12 else 'unknown'
+    print('Queue verification failed: ' + type(exc).__name__ + '; code=' + safe_code + '. Worker was not stopped.')
+    sys.exit(4)
+'@
+    $check | & $python -
+    if ($LASTEXITCODE -ne 0) { throw 'Queue check did not pass. Worker was not stopped.' }
+} finally {
+    $env:SUPABASE_KEY = $oldKey
+    Remove-Variable oldKey -ErrorAction SilentlyContinue
+}
 $running = Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" | Where-Object { $_.CommandLine -like '*SFB_Seeker_v2_env.bat*' }
 $running | ForEach-Object { Stop-Process -Id $_.ProcessId -ErrorAction Stop }
 $env:PYTHONUNBUFFERED = '1'
