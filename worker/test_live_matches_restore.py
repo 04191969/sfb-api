@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import unittest
 from pathlib import Path
@@ -26,6 +27,21 @@ def current_worker():
 
 
 class RestorationTests(unittest.TestCase):
+    def test_windows_log_encoding_does_not_abort_or_change_source(self):
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding='cp1252', errors='strict')
+        original = 'V2: Incomplete. Price − discount; guitar U0001f3b8'
+        with patch('sys.stdout', stream), patch('sys.stderr', stream):
+            restore.protect_log_encoding()
+            print(original)
+            print('Manual request complete')
+            stream.flush()
+        logged = raw.getvalue().decode('cp1252')
+        self.assertIn(r'\u2212', logged)
+        self.assertIn('Manual request complete', logged)
+        self.assertIn('−', original)
+        self.assertEqual(stream.encoding, 'cp1252')
+
     def test_exact_snapshot_and_historical_rules(self):
         with dependencies():
             baseline = restore.load_baseline()

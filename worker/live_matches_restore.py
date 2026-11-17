@@ -1,9 +1,21 @@
 """Run the historical Live Matches consumer path without replacing Seeker."""
 import hashlib
+import sys
 from pathlib import Path
 
 BASELINE = "f972a58e01aeef7291e269eb50e283e8d646e12d"
 SHA256 = "81bf6455dab7eef094d443c6dd75bdedc559f731f0df80342282ba2a9a1be75c"
+
+def protect_log_encoding():
+    """A character in a listing must not abort the run on Windows cp1252.
+
+    Preserve the configured log encoding; escape unsupported log characters.
+    Source text, model input, and saved assessment strings are not modified.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, 'reconfigure', None)
+        if callable(reconfigure):
+            reconfigure(errors='backslashreplace')
 
 def load_baseline():
     path = Path(__file__).with_name("live_matches_f972a58.bat")
@@ -18,6 +30,7 @@ def load_baseline():
 
 def run_claimed(sb, client, seen, run):
     """The current worker owns claiming, heartbeat, scheduling and blank Seeker runs."""
+    protect_log_encoding()
     if not (run.get("search_query") or "").strip() or run.get("job_kind") in ("market_discovery", "recheck"):
         raise ValueError("Historical Live Matches accepts typed consumer searches only")
     baseline = load_baseline()
