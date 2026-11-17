@@ -408,7 +408,7 @@ def seeker_market_discover(request, market_id):
     try:
         created = sb.rpc(
             "enqueue_market_discovery",
-            {"market": market["id"], "query": market_scope(market["name"], market["id"])},
+            {"market": market["id"], "query": market_scope(market["name"], market["id"]), "job_trigger": "user"},
         ).execute()
     except Exception as exc:
         text = str(exc).lower()
