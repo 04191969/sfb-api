@@ -13,12 +13,6 @@ function Get-UserEnv([string]$name) {
 $env:SEEKER_AUTO_SEARCH = "0"
 $env:OPENAI_KEY = Get-UserEnv "OPENAI_KEY"
 $env:SUPABASE_KEY = Get-UserEnv "SUPABASE_KEY"
-# Only the locked API discovery child uses these; never log their values.
-foreach ($name in @('EBAY_CLIENT_ID', 'EBAY_CLIENT_SECRET')) {
-    $value = Get-UserEnv $name
-    if ($value) { [Environment]::SetEnvironmentVariable($name, $value, 'Process') }
-}
-Remove-Variable value -ErrorAction SilentlyContinue
 if (-not $env:OPENAI_KEY -or -not $env:SUPABASE_KEY) { exit 1 }
 $log = Join-Path $env:TEMP "sfb-seeker-start.log"
 $err = Join-Path $env:TEMP "sfb-seeker-start.err"

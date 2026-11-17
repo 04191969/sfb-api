@@ -12,7 +12,8 @@ def execute(control):
     factory = load_runner(cfg['package'], manifest, mode='ebay_api')
     from automatic_run import locked
     from public_search_adapter import PublicSearchBrowser
-    from owner_api_bridge import OwnerApiBridge, observe_completion, ebay_options
+    from owner_api_bridge import OwnerApiBridge, observe_completion
+    from railway_ebay_transport import relay_options
     from supabase import create_client
     sb = create_client('https://fyxglozykvhrfejrcrqz.supabase.co', os.environ['SUPABASE_KEY'])
     key = os.environ['OPENAI_KEY']
@@ -22,6 +23,9 @@ def execute(control):
         def __init__(self, *args, **kwargs):
             # Supply the browser before ApiRun wraps it for API seller details.
             super().__init__(*args, public_browser=PublicSearchBrowser, **kwargs)
+            self.r['ebay_api']['mode'] = 'live'
+            self.r['ebay_api']['transport'] = 'Railway authenticated relay'
+            self.persist()
 
         def model(self, kind, body, key, reservation):
             baseline = 0
@@ -55,12 +59,7 @@ def execute(control):
         result.update(status=status, summary=summary)
     try:
         connect_run(cfg['job'], cfg['output'], ReservedRun, key,
-                    os.environ.get('SFB_SEEKER_RUN_ESTIMATE', '1.00'), publish, finish, locked, runner_options=ebay_options(os.environ))
-    except ValueError as exc:
-        if str(exc).startswith('Missing eBay production credentials:'):
-            result.update(status='failed', summary=str(exc))
-        else:
-            raise
+                    os.environ.get('SFB_SEEKER_RUN_ESTIMATE', '1.00'), publish, finish, locked, runner_options=relay_options(os.environ))
     finally:
         result.setdefault('status', 'failed')
         result.setdefault('summary', 'Search incomplete — five-step runtime stopped')
