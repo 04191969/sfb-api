@@ -1,5 +1,7 @@
 """Consumer-only discovery corrections; no changes to the frozen worker or V2."""
 import re
+import json
+from html.parser import HTMLParser
 from urllib.parse import urlsplit, unquote
 
 
@@ -51,6 +53,59 @@ def unrelated(row, item):
     return len(product_words(item)) >= 2 and len(product_words(text)) >= 3 and candidate_hits(row, item) == 0
 
 
+class _CraigslistAd(HTMLParser):
+    """Read only the page's own posting fields and sale-category metadata."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.canonical = ''
+        self.fields = {'titletextonly': '', 'postingbody': ''}
+        self.active = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'link' and attrs.get('rel') == 'canonical':
+            self.canonical = attrs.get('href', '')
+        if tag in ('br', 'img', 'input', 'meta', 'link', 'hr'):return
+        field = attrs.get('id')
+        self.active.append((tag, field if field in self.fields else None))
+
+    def handle_endtag(self, tag):
+        for i in range(len(self.active) - 1, -1, -1):
+            if self.active[i][0] == tag:
+                del self.active[i:]
+                break
+
+    def handle_data(self, data):
+        for _, field in self.active:
+            if field:self.fields[field] += data
+
+
+def craigslist_sale_ad(html, url, info, scope):
+    host = (urlsplit(url).hostname or '').lower()
+    if not (host == 'craigslist.org' or host.endswith('.craigslist.org')):return False
+    if not scope['is_classified_ad'](url) or info.get('price') is None:return False
+    page = _CraigslistAd()
+    page.feed(html or '')
+    target = url.rstrip('/')
+    if page.canonical.rstrip('/') != target:return False
+    if not all(value.strip() for value in page.fields.values()):return False
+    if scope['classified_closed'](' '.join(page.fields.values())):return False
+    # Craigslist's own breadcrumb binds this specific post to its sale section.
+    # A generic navigation link, related ad, wanted post, or search page is insufficient.
+    for block in re.findall(r'(?is)<script[^>]*application/ld\+json[^>]*>(.*?)</script>', html or ''):
+        try:data = json.loads(block)
+        except (ValueError, TypeError):continue
+        for node in scope['_json_nodes'](data):
+            if node.get('@type') != 'BreadcrumbList':continue
+            entries = node.get('itemListElement') or []
+            if not entries or not all(isinstance(x, dict) for x in entries):continue
+            if str(entries[-1].get('item', '')).rstrip('/') != target:continue
+            names = [str(x.get('name', '')).lower().strip() for x in entries[:-1]]
+            if any('wanted' in name for name in names):continue
+            if 'for sale' in names:return True
+    return False
+
+
 def install(scope):
     original_canonical = scope['canonical_item_url']
     original_qualifies = scope['qualifies']
@@ -60,6 +115,9 @@ def install(scope):
 
     def inspect(html, query, url):
         info = original_inspect(html, query, url)
+        if (info.get('readable') and info.get('status') == 'unconfirmed'
+                and craigslist_sale_ad(html, url, info, scope)):
+            info.update(status='available', evidence='classified_ad', checked_at=scope['_checked_now']())
         if info.get('readable') and info.get('price') is None:
             # Only an explicit current asking-price label on the already scoped
             # item text. Never take the first dollar amount from an entire page.

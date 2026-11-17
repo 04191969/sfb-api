@@ -104,6 +104,45 @@ class DiscoveryTests(unittest.TestCase):
         ]:
             self.assertFalse(unrelated(row, 'LL Bean Sport Cruiser 7 Bicycle'))
 
+    def craigslist_html(self, url, category='bicycles - by owner', body='LL Bean Hunter Green Sports Cruiser 7 Bicycle. Great condition, couple scratches.'):
+        import json
+        crumb = {'@type': 'BreadcrumbList', 'itemListElement': [
+            {'name': 'for sale', 'item': 'https://www.craigslist.org/search?cat=sss'},
+            {'name': category, 'item': 'https://www.craigslist.org/search?cat=bia'},
+            {'name': 'LL Bean Sport Cruiser 7 Bicycle', 'item': url}]}
+        return (f'<html><head><link rel="canonical" href="{url}">'
+                + '<script type="application/ld+json">' + json.dumps(crumb) + '</script>'
+                + '<script type="application/ld+json">{"@type":"Product","offers":{"price":"135.00"}}</script></head><body>'
+                + '<h1><span id="titletextonly">LL Bean Sport Cruiser 7 Bicycle</span> - $135</h1>'
+                + f'<section id="postingbody">{body}</section></body></html>')
+
+    def test_craigslist_own_sale_structure_without_sale_words(self):
+        url = 'https://www.craigslist.org/view/d/arlington-ll-bean-sport-cruiser-bicycle/fuoAb8TXm1iswswPpAZku3'
+        result = self.s['inspect_listing_html'](self.craigslist_html(url), 'LL Bean Sport Cruiser 7 Bicycle', url)
+        self.assertEqual(result['status'], 'available')
+        self.assertEqual(result['evidence'], 'classified_ad')
+        self.assertTrue(result['checked_at'])
+        self.assertEqual(result['price'], 135)
+        self.assertIsNone(result['shipping'])
+
+    def test_craigslist_closed_wanted_other_page_and_missing_fields(self):
+        url = 'https://www.craigslist.org/view/d/arlington-bike/abc123'
+        base = self.craigslist_html(url)
+        for html in [self.craigslist_html(url, body='This bicycle has been sold.'),
+                     self.craigslist_html(url, body='This posting has expired.')]:
+            self.assertEqual(self.s['inspect_listing_html'](html, 'LL Bean Sport Cruiser 7 Bicycle', url)['status'], 'ended')
+        for html, link in [
+            (self.craigslist_html(url, category='wanted - by owner'), url),
+            (base.replace('id="postingbody"', 'id="related"'), url),
+            (base.replace('id="titletextonly"', 'id="other"'), url),
+            (base.replace('$135', '').replace('"price":"135.00"', '"price":null'), url),
+            (base, url + 'other'),
+            (base, 'https://example.com/view/d/arlington-bike/abc123'),
+            (base, 'https://www.craigslist.org/search/bia'),
+            ('<html>Access denied</html>', url),
+        ]:
+            self.assertNotEqual(self.s['inspect_listing_html'](html, 'LL Bean Sport Cruiser 7 Bicycle', link)['status'], 'available')
+
     def test_explicit_price_beyond_old_excerpt_limit(self):
         text = '<html><body>Fender ST62 Buy It Now. ' + ('description ' * 80) + '. Asking price: $925.00</body></html>'
         result = self.s['inspect_listing_html'](text, 'Fender ST62', 'https://reverb.com/item/123-example')
