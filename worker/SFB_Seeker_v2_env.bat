@@ -3421,6 +3421,18 @@ def check_manual_requests(sb, openai_client, seen):
             run_market_discovery(sb, openai_client, seen, run)
             return True
 
+        if query:
+            import live_matches_restore
+            try:
+                return live_matches_restore.run_claimed(sb, openai_client, seen, run)
+            except Exception as exc:
+                sb.table("seeker_runs").update({
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "result_summary": f"Live Matches restore failed: {exc}",
+                }).eq("id", run_id).execute()
+                return True
+
         matches_found = 0
         verified_found = 0
 
