@@ -130,22 +130,37 @@ class PublicSearchBrowser(Browser):
             row['request_counts'] = self.counters()
             (self.folder / 'TRACE.json').write_text(json.dumps(self.trace, indent=2), encoding='utf-8')
 
-    def rendered_search(self, query):
-        """Same query and original rendered Bing route; existing limits apply."""
-        self.boundary()
-        if 'www.bing.com' in self.held_hosts or 'bing.com' in self.held_hosts:
-            raise SiteBlocked('Previously held Bing host')
-        return super().search(query)
-
     def search(self, query):
+        # Every query visits the public engine roster; Bing never gates it.
+        groups = []
+        failures = []
         try:
-            return self.bing_document_search(query)
+            groups.append(self.public_engine_search(query))
         except RunLimitReached:
             raise
-        except Exception:
-            # Other public engines remain fallbacks; never retry a challenge.
-            self.boundary()
-            return self.public_engine_search(query)
+        except SearchExtractionError as exc:
+            failures.append(str(exc))
+        try:
+            groups.append(self.bing_document_search(query))
+        except RunLimitReached:
+            raise
+        except Exception as exc:
+            failures.append(str(exc))
+        merged, seen = [], set()
+        # Interleave engines so one provider cannot fill the candidate allowance.
+        by_engine = {}
+        for group in groups:
+            for row in group:
+                by_engine.setdefault(row.get('engine', 'bing'), []).append(row)
+        for index in range(max([len(g) for g in by_engine.values()] or [0])):
+            for group in by_engine.values():
+                if index >= len(group): continue
+                row = group[index]
+                if row['url'] in seen: continue
+                seen.add(row['url']); merged.append(row)
+        if not merged and failures:
+            raise SearchExtractionError('Public multi-engine search incomplete; see browser/TRACE.json')
+        return merged
 
     def public_engine_search(self, query):
         rows, seen, attempts = [], set(), []
@@ -156,6 +171,8 @@ class PublicSearchBrowser(Browser):
             attempts.append(entry)
             self.trace.append(entry)
             try:
+                if urlsplit(url).hostname in self.held_hosts:
+                    raise SiteBlocked('Previously refused engine host')
                 found = parse(self.fetch(url))
                 entry.update(state='captured', result_count=len(found))
                 for item in found[:10]:
@@ -172,6 +189,8 @@ class PublicSearchBrowser(Browser):
                 raise
             except Exception as exc:
                 entry.update(state='held', reason=str(exc)[:300], error_type=type(exc).__name__)
+                if any(code in str(exc) for code in ('HTTP 403', 'HTTP 429', 'challenge', 'Challenge')):
+                    self.held_hosts.add(urlsplit(url).hostname)
                 return False
             finally:
                 entry['request_counts'] = self.counters()
@@ -204,12 +223,50 @@ class PublicSearchBrowser(Browser):
             return found
         attempt('duckduckgo', 'https://html.duckduckgo.com/html/', {'q': query}, ddg)
 
+        def html_results(text, selector, heading_selector, snippet_selector):
+            soup = BeautifulSoup(text, 'html.parser')
+            found = []
+            for block in soup.select(selector):
+                link = block.select_one(heading_selector)
+                if not link: continue
+                snippet = block.select_one(snippet_selector)
+                u = link.get('href', '')
+                if u.startswith('/url?'):
+                    u = parse_qs(urlsplit(u).query).get('q', [''])[0]
+                if not u.startswith(('http://', 'https://')): continue
+                found.append(dict(url=u, title=link.get_text(' ', strip=True),
+                    snippet=snippet.get_text(' ', strip=True) if snippet else ''))
+            if not found:
+                raise SearchExtractionError('Public HTML result layout empty or unreadable')
+            return found
+
         def mojeek(text):
-            data = json.loads(text).get('response', {})
-            if not isinstance(data.get('results'), list):
-                raise SearchExtractionError('Mojeek result layout unknown')
-            return [dict(url=r.get('url', ''), title=r.get('title', ''), snippet=r.get('desc', '')) for r in data['results']]
-        attempt('mojeek', 'https://www.mojeek.com/search', dict(q=query, fmt='json'), mojeek)
+            return html_results(text, 'ul.results-standard > li', 'h2 a', 'p.s')
+        attempt('mojeek', 'https://www.mojeek.com/search', dict(q=query), mojeek)
+        def brave(text):
+            return html_results(text, 'div.snippet', 'a.heading-serpresult, a[href]:has(.title)', '.snippet-description, .description')
+        attempt('brave', 'https://search.brave.com/search', dict(q=query), brave)
+        def google(text):
+            soup = BeautifulSoup(text, 'html.parser'); found = []
+            for heading in soup.select('h3'):
+                link = heading.find_parent('a')
+                if not link: continue
+                u = link.get('href', '')
+                if u.startswith('/url?'): u = parse_qs(urlsplit(u).query).get('q', [''])[0]
+                if u.startswith(('http://', 'https://')):
+                    found.append(dict(url=u, title=heading.get_text(' ', strip=True), snippet=''))
+            if not found: raise SearchExtractionError('Google result layout empty or unreadable')
+            return found
+        attempt('google', 'https://www.google.com/search', dict(q=query), google)
+        def yahoo(text):
+            from urllib.parse import unquote
+            import re
+            found = html_results(text, '#web .algo', 'h3 a', '.compText')
+            for item in found:
+                wrapped = re.search(r'/RU=([^/]+)/', item['url'])
+                if wrapped: item['url'] = unquote(wrapped[1])
+            return found
+        attempt('yahoo', 'https://search.yahoo.com/search', dict(p=query), yahoo)
         if not rows and any(a['state'] == 'held' for a in attempts):
             raise SearchExtractionError('Public search incomplete: engines blocked, unreadable, or timed out; see browser/TRACE.json')
         return rows

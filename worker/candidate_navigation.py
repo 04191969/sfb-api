@@ -63,7 +63,7 @@ class CandidateNavigationMixin:
         try:
             seller = super().discover_seller(queries, buyer)
             if seller is None and self.unresolved_searches:
-                self.r.update(state='search_extraction_failed', reason='Search incomplete: both document-only and rendered Bing returned results without requested-product evidence. This does not establish that no sellers exist.')
+                self.r.update(state='search_extraction_failed', reason='Search incomplete: public search engines returned results without requested-product evidence. This does not establish that no sellers exist.')
                 self.persist()
             return seller
         finally:
@@ -77,18 +77,9 @@ class CandidateNavigationMixin:
             evidence = terms(row.get('title', '') + ' ' + row.get('snippet', ''))
             return any(group <= evidence for group in self.product_groups)
         raw_count = len(rows)
-        if rows and not any(relevant(row) for row in rows) and hasattr(self.browser, 'rendered_search'):
-            self.event('Retrying unproductive search in rendered Bing', query=query,
-                       reason='Document-only results lack requested-product evidence')
-            rendered = self.browser.rendered_search(query)
-            self.r['searches'].append(dict(purpose=purpose, query=query,
-                retrieval='rendered_bing_fallback', results=rendered))
-            raw_count += len(rendered)
-            seen = {row['url'] for row in rows}
-            rows = rows + [row for row in rendered if row['url'] not in seen]
-            if not any(relevant(row) for row in rendered):
-                self.unresolved_searches.append(query)
-                self.event('Search relevance unresolved', query=query)
+        if rows and not any(relevant(row) for row in rows):
+            self.unresolved_searches.append(query)
+            self.event('Search relevance unresolved across public engines', query=query)
         kept = []
         for row in rows:
             evidence = terms(row.get('title', '') + ' ' + row.get('snippet', ''))
