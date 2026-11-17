@@ -1,0 +1,21 @@
+{
+  "component": "live_matches",
+  "release_id": "split-bea3977-live-1",
+  "baseline": "bea39775a007c5153dcedd5a241f1470a119c078",
+  "v2_version": "f033fe1d341e17932b0dd421e5ef6f838a5897c03e4f01de8c6b7c9b3e0b2b3d",
+  "files": {
+    "SFB_Seeker_v2_env.bat": "0e96edea94f80c67bb2311d27e23fe8227bb312ee34f09e2f75fe5dfdd4151dc",
+    "runtime_support.py": "50151805b0e62e3291141432845e3807337f17ff8e6d4ac1b98423f02ad4ccac",
+    "live_matches_restore.py": "53b9149eea8de4a77276bffa220b9a55bec0f19a242a6bcde39e89f387404bb9",
+    "live_matches_f972a58.bat": "81bf6455dab7eef094d443c6dd75bdedc559f731f0df80342282ba2a9a1be75c",
+    "live_matches_currency.py": "6197713d034b3db93f7a4d4e68be99f82c2b82928c73b6bb6d9e60fc55e08f82",
+    "live_matches_discovery.py": "b7330a3c3607bcd98f031bd17e75e1079ac9e0a7b19032fdc514476b425ff2a6",
+    "runtime.py": "a21cf978f0a257e1a91ad7aee575c87a80188e3b0b7b6b41e230cdb75b15d858",
+    "live_matches_v2/reading_contract.py": "fddf25e8b1169c6e8fec251b30c813533fcd183e942d9f8ef6bcc5238b75a049",
+    "live_matches_v2/request_template.json": "6007c7c33a1270d4f7a6736a7ba736ae216fd5f53b938a7fba982dc95bd90009",
+    "live_matches_v2/adapter.py": "691edeadb52306b6090232d2afaf55e234505c0dfe0dfb078c2363d4ec1b2d53",
+    "live_matches_v2/shared_rules.py": "bd319bba892745ff0e059982c730378bc7a9664f4c0189c0e86ea7e219f92fee",
+    "live_matches_v2/INTEGRITY.json": "96cf601424d082cae8c3ddfadbfa2f36d08664668a6dbe9a284d9dd80b6ee7fc",
+    "live_matches_v2/__init__.py": "d998c143a68e5d3f06e330ae7a777b0427b374adabaee83bd2a09a14724f9164"
+  }
+}

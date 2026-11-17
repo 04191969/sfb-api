@@ -1,0 +1,27 @@
+{
+  "component": "seeker",
+  "release_id": "split-bea3977-seeker-1",
+  "baseline": "bea39775a007c5153dcedd5a241f1470a119c078",
+  "v2_version": "f033fe1d341e17932b0dd421e5ef6f838a5897c03e4f01de8c6b7c9b3e0b2b3d",
+  "files": {
+    "SFB_Seeker_v2_env.bat": "3f5c8d18678e502146d41ac20c4e08dfabcc47da5e9b6e38dc8199c15d7642ef",
+    "five_step_host.py": "49155d3a0a5df85f31709cc783369115e5881089a99bcfc38e0de43f1663c017",
+    "five_step_runtime.py": "6bdd6927f43689ece5541ab362be0d7b7b9ceaab6bd298cecd08fce0157e5a56",
+    "candidate_navigation.py": "36a1ff6241196f0dfbf04cc173d2e0d726d4799553dfdecba69af7316add662f",
+    "railway_ebay_transport.py": "a41123696afe6796ee5f671aeb5651340e278ee7148152a32c4b454269e76d78",
+    "public_search_adapter.py": "cb1fa8d06ba51029974d385ce11deb8fcf7af595bc1f0203cb08dcba59ad8759",
+    "five_step_package_hashes.json": "5ac6a36c4bc0a38c96ad689024d9758844c237fed377a505b2701357b0a8337d",
+    "owner_api_bridge.py": "569ab7c0ad92748ce12aee88ff7e0626299f4f06a6ec1e2ef094448b44c888b4",
+    "runtime_support.py": "50151805b0e62e3291141432845e3807337f17ff8e6d4ac1b98423f02ad4ccac",
+    "seeker_connector.py": "9a292b669c5a37e1e74bf775a825734deef3406157662047bcb5412a526c5834",
+    "v2_bridge.py": "3d2ff26f59bcaf69533f61a43cf7d1cfae36e980d5516970792c5f0588003b44",
+    "README.md": "f0ebe9ad0ec62200a977b336710599b6eb6df5b90cb745f9e4383bae9f9ba58b",
+    "runtime.py": "a21cf978f0a257e1a91ad7aee575c87a80188e3b0b7b6b41e230cdb75b15d858",
+    "seeker_v2/reading_contract.py": "fddf25e8b1169c6e8fec251b30c813533fcd183e942d9f8ef6bcc5238b75a049",
+    "seeker_v2/request_template.json": "6007c7c33a1270d4f7a6736a7ba736ae216fd5f53b938a7fba982dc95bd90009",
+    "seeker_v2/adapter.py": "691edeadb52306b6090232d2afaf55e234505c0dfe0dfb078c2363d4ec1b2d53",
+    "seeker_v2/shared_rules.py": "bd319bba892745ff0e059982c730378bc7a9664f4c0189c0e86ea7e219f92fee",
+    "seeker_v2/INTEGRITY.json": "96cf601424d082cae8c3ddfadbfa2f36d08664668a6dbe9a284d9dd80b6ee7fc",
+    "seeker_v2/__init__.py": "d998c143a68e5d3f06e330ae7a777b0427b374adabaee83bd2a09a14724f9164"
+  }
+}
