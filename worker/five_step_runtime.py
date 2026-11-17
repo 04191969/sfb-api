@@ -12,12 +12,13 @@ def execute(control):
     factory = load_runner(cfg['package'], manifest)
     from automatic_run import locked
     from public_search_adapter import PublicSearchBrowser
+    from candidate_navigation import CandidateNavigationMixin
     from supabase import create_client
     sb = create_client('https://fyxglozykvhrfejrcrqz.supabase.co', os.environ['SUPABASE_KEY'])
     key = os.environ['OPENAI_KEY']
     # Subclass the execution boundary only. Locked payloads, queries, transports,
     # validation, local ledger and live provenance stay on the inherited path.
-    class ReservedRun(factory):
+    class ReservedRun(CandidateNavigationMixin, factory):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.browser_factory = lambda: PublicSearchBrowser(self.folder / 'browser', stop=self.cancelled)
