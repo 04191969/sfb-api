@@ -3481,7 +3481,8 @@ def check_manual_requests(sb, openai_client, seen):
                 incomplete,
             )
         else:
-            run_public_discovery_cycle(sb, openai_client, seen, run)
+            import five_step_host
+            five_step_host.run_claimed(sb, write_heartbeat, run)
             return True
         sb.table("seeker_runs").update({
             "status": "completed",

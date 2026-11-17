@@ -36,19 +36,14 @@ class Query:
 class PublicCycleTests(unittest.TestCase):
     def setUp(self): self.w = load_worker(); self.db = DB()
 
-    def test_blank_dispatch_zero_and_cursor_survives_next_run(self):
-        visited = []
-        def discover(sb, client, seen, market, report): visited.append(market['id'])
-        with patch.dict(self.w, {'claim_next_run': lambda sb: {'id': 'run', 'search_query': None},
-                                 'discover_public_market': discover}):
-            self.w['check_manual_requests'](self.db, None, {})
-            self.assertEqual(visited, ['0', '1', '2'])
-            self.assertIn('0 new match(es)', self.db.rows['seeker_runs'][0]['result_summary'])
-            self.assertIn('Cycle incomplete', self.db.rows['seeker_runs'][0]['result_summary'])
-            self.assertEqual(len(self.db.rows['seeker_check_history']), 3)
-            visited.clear()
-            self.w['run_public_discovery_cycle'](self.db, None, {}, {'id': 'run'})
-            self.assertEqual(visited[0], '3')
+    def test_blank_dispatch_uses_five_step_bridge(self):
+        calls = []
+        bridge = SimpleNamespace(run_claimed=lambda sb, heartbeat, run: calls.append(run))
+        with patch.dict('sys.modules', {'five_step_host': bridge}), patch.dict(self.w, {
+                'claim_next_run': lambda sb: {'id': 'run', 'search_query': None},
+                'run_public_discovery_cycle': lambda *a: self.fail('Legacy cycle invoked')}):
+            self.assertTrue(self.w['check_manual_requests'](self.db, None, {}))
+        self.assertEqual([r['id'] for r in calls], ['run'])
 
     def test_failure_is_recorded_and_other_markets_continue(self):
         def discover(sb, client, seen, market, report):
