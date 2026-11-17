@@ -57,8 +57,9 @@ class RestorationTests(unittest.TestCase):
         baseline['push_match'] = MagicMock(return_value=('match', True))
         baseline['mark_seen'] = MagicMock()
         run = {'id': 'test', 'search_query': 'Barudan Profit 902T', 'job_kind': 'consumer_search'}
-        with patch.object(restore, 'load_baseline', return_value=baseline):
+        with patch.object(restore, 'load_baseline', return_value=baseline), patch('live_matches_v2.adapter.install') as install:
             self.assertTrue(restore.run_claimed(sb, object(), {}, run))
+        install.assert_called_once_with(baseline)
         baseline['push_match'].assert_called_once()
         sb.rpc.assert_not_called()
         sb.table.return_value.update.assert_called_once()
