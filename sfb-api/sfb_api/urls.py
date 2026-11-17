@@ -1,3 +1,4 @@
+from .api.seeker_ebay import relay as seeker_ebay_relay
 from django.urls import path
 from sfb_api.api import views, views_catalog
 
@@ -51,6 +52,7 @@ urlpatterns = [
     path('api/seeker/markets/<str:market_id>/control/', views.seeker_market_control, name='seeker-market-control'),
     path('api/seeker/markets/<str:market_id>/discover/', views.seeker_market_discover, name='seeker-market-discover'),
     path('api/seeker/usage/', views.seeker_usage, name='seeker-usage'),
+    path('api/seeker/ebay/', seeker_ebay_relay, name='seeker-ebay-relay'),
     path('api/seeker/pause/', views.seeker_pause, name='seeker-pause'),
     path('api/seeker/runs/', views.seeker_runs, name='seeker-runs'),
     path('api/seeker/markets/<str:market_id>/', views.seeker_market_detail, name='seeker-market-detail'),
