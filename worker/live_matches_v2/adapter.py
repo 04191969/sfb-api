@@ -32,6 +32,23 @@ def install(scope):
     body_template = template()
     original_search = scope['search_listings']
     records = {}
+    assessments = []
+    original_outcome = scope['search_outcome']
+    original_print = scope.get('print', print)
+
+    def log(*args, **kwargs):
+        if args and isinstance(args[0], str) and args[0].startswith('    Not a qualifying product:') and assessments:
+            latest = assessments[-1]
+            args = ('    Assessment withheld: ' + latest['reason'], *args[1:])
+        original_print(*args, **kwargs)
+
+    def outcome(listings, incomplete=''):
+        summary = original_outcome(listings, incomplete)
+        held = [a for a in assessments if a['product'] == 'matches' and a['decision'] == 'Incomplete']
+        if held:
+            reasons = '; '.join(dict.fromkeys(a['reason'] for a in held))
+            summary = f'{len(held)} product match(es) held for review: {reasons}. ' + summary
+        return summary
 
     def search(*args, **kwargs):
         result = original_search(*args, **kwargs)
@@ -72,6 +89,7 @@ def install(scope):
         except (ValueError, TypeError, KeyError):
             raise scope['ReservationClosed']('V2 assessment incomplete: response failed evidence/schema validation or did not complete; no automatic retry') from None
         accepted = qualification['decision'] == 'Send'
+        assessments.append(qualification)
         reason = 'V2: ' + qualification['decision'] + '. ' + qualification['reason']
         reason += ' Product evidence: ' + reading['product']['explanation']
         if qualification['disclosures']:
@@ -94,3 +112,5 @@ def install(scope):
 
     scope['search_listings'] = search
     scope['ai_evaluate_match'] = evaluate
+    scope['search_outcome'] = outcome
+    scope['print'] = log

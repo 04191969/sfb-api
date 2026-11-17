@@ -40,6 +40,8 @@ def run_claimed(sb, client, seen, run):
     baseline["claim_next_run"] = lambda _sb: run
     from live_matches_discovery import install as install_discovery
     install_discovery(baseline)
+    from live_matches_currency import install as install_currency
+    install_currency(baseline)
     from live_matches_v2.adapter import install
     install(baseline)
     print("    Live Matches search baseline: f972a58; assessment: V2 (gpt-5.4-2026-03-05)")
