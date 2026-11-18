@@ -42,7 +42,8 @@ def validate(r,pair,shape_validator):
     if r['product']['status']!='unknown' and not all(evidence(r['product']['evidence'],s) for s in ('buyer','seller')):raise ValueError('Product relation needs both sources')
     if r['availability']['value']!='unknown' and not evidence(r['availability']['evidence'],'seller'):raise ValueError('Availability needs source evidence')
     bu=r['budget'];cap=amount(bu['limit'])
-    if bu['mode'] in ('firm','flexible') and (cap is None or not bu['buyer_quote']):raise ValueError('Budget needs amount and buyer quote')
+    if bu['mode']=='firm' and (cap is None or not bu['buyer_quote']):raise ValueError('Budget needs amount and buyer quote')
+    if bu['mode']=='flexible' and not bu['buyer_quote']:raise ValueError('Flexible budget needs buyer quote')
     if bu['mode']=='none' and cap is not None:raise ValueError('No-budget reading contains a cap')
     q=r['quantity']
     for field in ('requested','items_per_unit','units_available','max_units_per_buyer'):

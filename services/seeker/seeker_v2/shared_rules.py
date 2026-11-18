@@ -1,7 +1,7 @@
 """One deterministic qualification policy for ALL experimental reading adapters."""
 from decimal import Decimal, InvalidOperation
 import math
-POLICY_VERSION='v2-qualification-trade-status-v1'
+POLICY_VERSION='seeker-v2-negotiable-budget-v1'
 
 
 def amount(v):
@@ -55,6 +55,6 @@ def qualify(r):
         else:value=None
         if value is None:reasons.append('Relevant cost unknown for firm budget')
         elif budget['currency'] is not None and budget['currency']==cost['currency'] and value>cap:return finish('No Send','Required purchase exceeds firm '+budget['basis']+' budget')
-    elif budget['mode']=='flexible':disclosures.append('Budget is a preference, not a firm ceiling')
+    elif budget['mode']=='flexible':disclosures.append('Price is negotiable; no numeric budget stated' if cap is None else 'Budget is a preference, not a firm ceiling')
     if reasons:return finish('Incomplete','; '.join(reasons))
     return finish('Send','Requested purchase meets the shared qualification checks on supplied evidence')

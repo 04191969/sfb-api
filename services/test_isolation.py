@@ -10,10 +10,13 @@ class IsolationTests(unittest.TestCase):
   for name in names:
    expected=subprocess.check_output(['git','show','bea39775a007c5153dcedd5a241f1470a119c078:worker/'+name],cwd=REPO)
    self.assertEqual((ROOT/'live_matches'/name).read_bytes(),expected,name)
- def test_v2_are_separate_identical_physical_files(self):
+ def test_v2_are_separate_physical_files_with_independent_integrity(self):
   for name in ('request_template.json','reading_contract.py','shared_rules.py','INTEGRITY.json','adapter.py'):
    a=ROOT/'live_matches/live_matches_v2'/name;b=ROOT/'seeker/seeker_v2'/name
-   self.assertEqual(a.read_bytes(),b.read_bytes())
+   if name in ('request_template.json','adapter.py'):self.assertEqual(a.read_bytes(),b.read_bytes())
+   for root in (a.parent,b.parent):
+    for file,digest in json.loads((root/'INTEGRITY.json').read_text()).items():
+     self.assertEqual(hashlib.sha256((root/file).read_bytes().replace(b'\r\n',b'\n')).hexdigest(),digest)
    self.assertNotEqual(a.stat().st_ino,b.stat().st_ino)
  def test_manifests_cover_files_and_independent_release_ids(self):
   ids=[]

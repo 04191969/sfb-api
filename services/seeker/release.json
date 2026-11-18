@@ -1,8 +1,8 @@
 {
   "component": "seeker",
-  "release_id": "split-bea3977-seeker-9",
+  "release_id": "split-bea3977-seeker-10",
   "baseline": "bea39775a007c5153dcedd5a241f1470a119c078",
-  "v2_version": "f033fe1d341e17932b0dd421e5ef6f838a5897c03e4f01de8c6b7c9b3e0b2b3d",
+  "v2_version": "7dc98a6e9b8e289d9ca4e0adbd4d9242898d0815e0dfaa6afe005ebb4649077c",
   "files": {
     "SFB_Seeker_v2_env.bat": "3f5c8d18678e502146d41ac20c4e08dfabcc47da5e9b6e38dc8199c15d7642ef",
     "continuation.py": "7e352819903cb35fe6edd10d362236f48a7d0b39329ca2a2e4aad213695b8b91",
@@ -20,11 +20,11 @@
     "lead_navigation.py": "487808351e62f269f27f98d7e560efbf14c5a941e064a8f4053d410796b9fd36",
     "README.md": "f0ebe9ad0ec62200a977b336710599b6eb6df5b90cb745f9e4383bae9f9ba58b",
     "runtime.py": "a21cf978f0a257e1a91ad7aee575c87a80188e3b0b7b6b41e230cdb75b15d858",
-    "seeker_v2/reading_contract.py": "fddf25e8b1169c6e8fec251b30c813533fcd183e942d9f8ef6bcc5238b75a049",
+    "seeker_v2/reading_contract.py": "2c69bf5fb55012ed491cfb3d6c6fddd57a69c1b0483bde8db79b8d5e647cd171",
     "seeker_v2/request_template.json": "6007c7c33a1270d4f7a6736a7ba736ae216fd5f53b938a7fba982dc95bd90009",
     "seeker_v2/adapter.py": "691edeadb52306b6090232d2afaf55e234505c0dfe0dfb078c2363d4ec1b2d53",
-    "seeker_v2/shared_rules.py": "bd319bba892745ff0e059982c730378bc7a9664f4c0189c0e86ea7e219f92fee",
-    "seeker_v2/INTEGRITY.json": "96cf601424d082cae8c3ddfadbfa2f36d08664668a6dbe9a284d9dd80b6ee7fc",
+    "seeker_v2/shared_rules.py": "7ebbff1a94586bad0aa364ecd37b69741b7599fa032b079bea108ea891f21d18",
+    "seeker_v2/INTEGRITY.json": "77deabdc2afcef46d7c0bc080dd5a605526e1254c787c4451b00ff9826c7dedd",
     "seeker_v2/__init__.py": "d998c143a68e5d3f06e330ae7a777b0427b374adabaee83bd2a09a14724f9164"
   }
 }
