@@ -18,6 +18,28 @@ CASES = [
 ]
 
 
+class SearchRowsBrowser:
+    """Use separately captured DDGS links with the unchanged page reader."""
+    def __init__(self, browser, query, rows):
+        self.browser, self.query, self.rows = browser, query, rows
+    def search(self, query):
+        if query != self.query:
+            raise ValueError('Unexpected query in DDGS handoff')
+        return self.rows
+    def visit(self, url, purpose, parent=None):
+        return self.browser.visit(url, purpose, parent)
+
+
+def ddgs_search(query, factory=None):
+    if factory is None:
+        from ddgs import DDGS
+        factory = DDGS
+    raw = list(factory(timeout=15).text(query, max_results=10))
+    rows = [dict(url=r['href'], title=r.get('title', ''), snippet=r.get('body', ''),
+                 query=query, engine='ddgs-auto') for r in raw if r.get('href')]
+    return raw, rows
+
+
 def run_case(browser, query, classify, tokens, record, wanted, limit=9):
     result = dict(query=query, state='started', returned=[], ranked=[], opened=[],
                   skipped=[], error=None, scope='public seller retrieval only')
@@ -74,6 +96,7 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--executable')
     parser.add_argument('--headless', action='store_true')
+    parser.add_argument('--provider', choices=('installed', 'ddgs'), default='installed')
     args = parser.parse_args()
     base = Path.home()/'SFB'/'seeker'
     component = args.component or base/'releases'/(base/'active.txt').read_text(encoding='utf-8').strip()
@@ -95,15 +118,29 @@ def main():
         from public_search_adapter import PublicSearchBrowser
         from lead_navigation import classify
         from automatic_run import tokens, record, WANTED
+        report['search_provider'] = args.provider
+        if args.provider == 'ddgs':
+            from importlib.metadata import version
+            report['ddgs_version'] = version('ddgs')
+            report['request_accounting'] = 'Browser counters cover page reading only; DDGS internal search requests are not included.'
         for name, query in CASES:
             print('Public retrieval: '+query, flush=True)
+            raw, rows = None, None
             try:
+                if args.provider == 'ddgs':
+                    raw, rows = ddgs_search(query)
+                    (output/(name+'-DDGS.json')).write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding='utf-8')
+                    print('DDGS returned '+str(len(rows))+' links; opening candidates with Seeker reader.', flush=True)
                 with PublicSearchBrowser(output/name, executable=args.executable, headless=args.headless) as browser:
-                    case = run_case(browser, query, classify, tokens, record, WANTED)
+                    reader = SearchRowsBrowser(browser, query, rows) if rows is not None else browser
+                    case = run_case(reader, query, classify, tokens, record, WANTED)
                     case['browser_counts'] = browser.counters()
                     case['engine_trace'] = [r for r in browser.trace if r.get('purpose') in ('search','public_search')]
             except Exception as exc:
                 case = dict(query=query, state='incomplete', error=type(exc).__name__+': '+str(exc))
+            if rows is not None:
+                case['ddgs_results'] = raw
+                case['ddgs_search_completed'] = True
             report['cases'].append(case)
             print(case['state'], flush=True)
             (output/'REPORT.json').write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')

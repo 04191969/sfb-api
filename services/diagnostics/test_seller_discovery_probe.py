@@ -1,6 +1,7 @@
 import importlib.util
 import re
 import hashlib
+import os
 import tempfile
 import sys
 import unittest
@@ -29,6 +30,46 @@ class ProbeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'Component integrity mismatch'):
                 p.verify_component(root,manifest)
 
+    def test_ddgs_adapter_preserves_each_result_url(self):
+        raw=[dict(href='https://seller.example/item/1',title='guitar',body='search excerpt')]
+        calls=[]
+        def factory(**kwargs):
+            self.assertEqual(kwargs,{'timeout':15})
+            return SimpleNamespace(text=lambda query,**kw:calls.append((query,kw)) or raw)
+        saved,rows=p.ddgs_search('guitar',factory)
+        self.assertEqual(saved,raw)
+        self.assertEqual(rows[0]['url'],raw[0]['href'])
+        self.assertEqual(calls,[('guitar',{'max_results':10})])
+    def test_ddgs_handoff_uses_page_text_not_snippet(self):
+        rows=[dict(url='https://seller.example/item/1',title='guitar',snippet='combined search text')]
+        calls=[]
+        def visit(url,purpose,parent):
+            calls.append((url,purpose,parent))
+            return dict(author_text='guitar original seller text')
+        browser=p.SearchRowsBrowser(SimpleNamespace(visit=visit),'guitar',rows)
+        r=p.run_case(browser,'guitar',lambda r:('ad','test'),lambda s:set(s.split()),lambda page,side:page,re.compile('WTB'))
+        self.assertEqual(r['opened'][0]['source']['author_text'],'guitar original seller text')
+        self.assertEqual(calls,[('https://seller.example/item/1','seller',None)])
+    def test_ddgs_handoff_rejects_wrong_query(self):
+        browser=p.SearchRowsBrowser(None,'guitar',[])
+        with self.assertRaises(ValueError):browser.search('different')
+    @unittest.skipUnless(os.environ.get('SFB_TEST_PACKAGE'), 'Pinned package required')
+    def test_ddgs_to_real_source_validator(self):
+        sys.path.insert(0,os.environ['SFB_TEST_PACKAGE'])
+        from automatic_run import record,tokens,WANTED
+        from lead_navigation import classify
+        url='https://seller.example/products/ventus-6s'
+        rows=[dict(url=url,title='Ventus Blue Velocore 6S shaft for sale',snippet='Snippet must not become evidence')]
+        text='Ventus Blue Velocore 6S shaft for sale. Seller offers this used golf shaft with a Titleist adapter. Asking $150.'
+        page=dict(url=url,title=rows[0]['title'],source_text=text,capture_id='fixture',extraction='single_article',single_listing=True,product=True,links=[])
+        browser=p.SearchRowsBrowser(SimpleNamespace(visit=lambda *a:page),'Ventus Blue Velocore 6S shaft for sale',rows)
+        result=p.run_case(browser,browser.query,classify,tokens,record,WANTED)
+        self.assertEqual(result['opened'][0]['source']['author_text'],text)
+        self.assertEqual(result['opened'][0]['source']['availability'],'unconfirmed')
+        page['single_listing']=False
+        result=p.run_case(browser,browser.query,classify,tokens,record,WANTED)
+        self.assertEqual(result['state'],'no_readable_source')
+        self.assertIn('Unbound source',result['opened'][0]['error'])
     def run_probe(self, rows, visit):
         browser=SimpleNamespace(search=lambda q:rows,visit=visit)
         return p.run_case(browser,'guitar',lambda r:('ad','test'),lambda s:set(s.split()),lambda page,side:page,re.compile('WTB'))
