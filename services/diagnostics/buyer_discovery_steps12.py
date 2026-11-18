@@ -89,6 +89,14 @@ def walk(seeds,fetch,state,report,persist,max_pages=20,max_ads_per_source=2):
    final=page.get('url',url)
    if urlsplit(final).hostname!=urlsplit(url).hostname:raise ValueError('Cross-site redirect; no evidence accepted')
    if entry['kind']=='directory':
+    # A thread can contain related-topic lists. Its original post takes priority.
+    document=BeautifulSoup(page['html'],'html.parser')
+    main=document.select_one('#ipsLayout_mainArea, main, #content') or document
+    if main.select(','.join(POST_SELECTORS)):
+     candidate=original_post(page['html'],final)
+     candidate['discovery_url']=source;report['buyers'].append(candidate)
+     event['resolved_kind']='individual_post'
+     save();continue
     parsed=directory_links(page['html'],final);event['topic_links']=len(parsed['posts']);event['next_pages']=parsed['next_pages']
     if parsed['recognized']:
      # Read a small batch immediately; retain the rest for later turns.

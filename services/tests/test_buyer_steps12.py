@@ -37,6 +37,29 @@ class Tests(unittest.TestCase):
   first=list(calls);second=self.report()
   m.walk([],fetch,state,second,lambda:None,max_pages=1)
   self.assertEqual(len(second['buyers']),1);self.assertEqual(len(calls),3);self.assertNotIn(calls[-1],first)
+ def test_mixed_search_direct_post_and_directory_both_reach_originals(self):
+  r=self.report();state={};calls=[]
+  direct='https://example.com/threads/direct.1/'
+  directory='https://example.com/forums/wtb/'
+  post='<h1>WTB camera</h1><div class="message-body">Looking for a camera.</div><div class="message-body">Reply: selling a bike</div>'
+  def fetch(u):
+   calls.append(u);return dict(status=200,url=u,html=self.directory() if u==directory else post)
+  m.walk([direct,directory],fetch,state,r,lambda:None,max_pages=3)
+  self.assertEqual(calls,[direct,directory,'https://example.com/threads/a.1/'])
+  self.assertEqual([b['url'] for b in r['buyers']],[direct,'https://example.com/threads/a.1/'])
+  self.assertTrue(all('Reply' not in b['text'] for b in r['buyers']))
+ def test_direct_post_takes_priority_over_related_thread_list(self):
+  r=self.report();calls=[];u='https://example.com/threads/direct.1/'
+  markup='<main><h1>WTB camera</h1><div class="message-body">I want to buy a camera.</div>'+self.directory().replace('<main>','').replace('</main>','')+'</main>'
+  def fetch(url):calls.append(url);return dict(status=200,url=url,html=markup)
+  m.walk([u],fetch,{},r,lambda:None)
+  self.assertEqual(calls,[u]);self.assertEqual(r['buyers'][0]['url'],u)
+ def test_closed_direct_post_does_not_follow_related_list(self):
+  r=self.report();calls=[];u='https://example.com/threads/direct.1/'
+  markup='<main><h1>WTB camera</h1><div class="message-body">Found one.</div>'+self.directory().replace('<main>','').replace('</main>','')+'</main>'
+  def fetch(url):calls.append(url);return dict(status=200,url=url,html=markup)
+  m.walk([u],fetch,{},r,lambda:None)
+  self.assertEqual(calls,[u]);self.assertEqual(r['buyers'],[])
  def test_pagination_cannot_leave_directory(self):
   r=m.directory_links(self.directory().replace('/forums/wtb/page-2','/forums/sales/page-2'),'https://example.com/forums/wtb/')
   self.assertEqual(r['next_pages'],[])
