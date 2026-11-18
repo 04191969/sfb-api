@@ -8,7 +8,7 @@ def packet_for(source):
  if digest!=source['source_sha256']:raise ValueError('Saved source fingerprint differs')
  return dict(direction='find_sellers',author_text=text,source=dict(url=source['url'],capture_id=digest,text_sha256=digest),source_limitations=['Automatically selected original-post region; source age and current availability are unconfirmed.'])
 
-def run(home,source_path,send=None):
+def run(home,source_path,send=None,output=None):
  root=home/'SFB'/'seeker';release=(root/'active.txt').read_text().strip()
  if Path(release).name!=release:raise ValueError('Invalid active release name')
  component=root/'releases'/release
@@ -17,7 +17,7 @@ def run(home,source_path,send=None):
  from discovery_reader import contract
  source=json.loads(source_path.read_text(encoding='utf-8-sig'))['buyers'][0]
  packet=packet_for(source);body=payload(packet)
- out=home/('SFB_Reader_Handoff_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f'));out.mkdir()
+ out=output or home/('SFB_Reader_Handoff_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f'));out.mkdir()
  report=dict(state='prepared',release=release,source_report=str(source_path),source_url=source['url'],posted_at=source.get('posted_at') or source.get('posted_at_raw'),availability='unconfirmed',paid_calls_dispatched=0,database_writes=0,production_changed=False)
  def save():(out/'REPORT.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
  (out/'REQUEST.json').write_text(json.dumps(body,indent=2),encoding='utf-8');save()

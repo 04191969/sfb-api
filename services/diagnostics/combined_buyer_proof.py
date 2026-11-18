@@ -49,7 +49,7 @@ def execute(out,state_path):
  out.mkdir(parents=True,exist_ok=False)
  state=json.loads(state_path.read_text(encoding='utf-8')) if state_path.exists() else {}
  selected=rotate(state)
- report=dict(state='running',searches=[],pages=[],buyers=[],failures=[],selected_boards=selected,model_calls=0,database_writes=0,production_changed=False,limits='Six searches; six board-route and six broad-route source visits. Original posts are candidates, not confirmed current buyers.')
+ report=dict(state='running',searches=[],pages=[],buyers=[],failures=[],selected_boards=selected,model_calls=0,database_writes=0,production_changed=False,limits=f'{len(QUERIES)*len(ENGINES)} searches; six board-route and six broad-route source visits. Original posts are candidates, not confirmed current buyers.')
  def save():
   (out/'REPORT.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
   (out/'STATE.json').write_text(json.dumps(state,indent=2),encoding='utf-8')
