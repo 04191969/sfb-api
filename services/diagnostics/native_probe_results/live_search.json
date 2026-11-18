@@ -1,0 +1,62 @@
+{
+  "started_at": "2026-11-18T14:06:34.708643+00:00",
+  "paid_model_calls": 0,
+  "database_writes": 0,
+  "production_changed": false,
+  "cases": [
+    {
+      "item": "Titleist GTS 4 9* head",
+      "searches": [],
+      "state": "incomplete",
+      "error": "DDGSException: No results found."
+    },
+    {
+      "item": "OG Ventus Velocore Blue 6s driver shaft",
+      "searches": [
+        {
+          "query": "OG Ventus Velocore Blue 6s driver shaft for sale",
+          "results": [
+            {
+              "title": "Fujikura Ventus Blue Velocore Driver Shaft - 2nd Swing Golf",
+              "href": "https://www.2ndswing.com/accessories/driver-shafts/fujikura-ventus-blue-velocore-driver-shaft",
+              "body": "Shop new and used Fujikura Ventus Blue Velocore Driver Shaft at 2nd Swing Golf - the industry's largest selection of new and used golf clubs and gear on the planet."
+            },
+            {
+              "title": "Ventus Blue 6s Velocore for sale | eBay",
+              "href": "https://www.ebay.com/sch/i.html?_nkw=ventus+blue+6s+velocore&_sop=12",
+              "body": "Get the best deals for Ventus Blue 6s Velocore at eBay.com. We have a great online selection at the lowest prices with Fast & Free shipping on many items!"
+            },
+            {
+              "title": "Fujikura Ventus TR Velocore Blue Driver Shaft (INV0000599)Fujikura Ventus Blue Driver Shaft for sale | eBayFujikura VENTUS VeloCore Blue Driver & Fairway Shaft - Custom ...Ventus Blue Velocore 6S | SidelineSwap | Buy and Sell on ...Fujikura Ventus Blue Velocore 6-S 65g Stiff 44.5\" Driver ...",
+              "href": "https://www.2ndswing.com/accessories/driver-shafts/fujikura-ventus-tr-velocore-blue-driver-shaft/stiff-60g-inv0000599",
+              "body": "Shop new and used Fujikura Ventus TR Velocore Blue Driver Shaft at 2nd Swing Golf today. Trade in your old clubs and save even more on your next purchase of Fujikura Ventus TR Velocore Blue Driver Shaft (INV0000599). Get the best deals for Fujikura Ventus Blue Driver Shaft at eBay.com. We have a great online selection at the lowest prices with Fast & Free shipping on many items! Shop the Fujikura Ventus Blue VeloCore shaft featuring VeloCore Technology for mid launch and balanced spin. Custom built by a Fujikura Diamond Dealer. Affordable Golf Shafts from fellow athletes. SidelineSwap connects buyers with quality used gear. Streamlined selling process. Fujikura Ventus Blue Velocore 6-S 65G Stiff 44.5\" Driver Shaft Taylormade Qi10."
+            },
+            {
+              "title": "Fujikura Ventus Blue Driver Shaft for sale | eBay",
+              "href": "https://www.ebay.com/sch/i.html?_nkw=fujikura+ventus+blue+driver+shaft&_sop=12",
+              "body": "Get the best deals for Fujikura Ventus Blue Driver Shaft at eBay.com. We have a great online selection at the lowest prices with Fast & Free shipping on many items!"
+            },
+            {
+              "title": "Fujikura VENTUS VeloCore Blue Driver & Fairway Shaft - Custom ...",
+              "href": "https://theshaftstore.com/products/fujikura-ventus-velocore-blue-driver-fairway-shaft",
+              "body": "Shop the Fujikura Ventus Blue VeloCore shaft featuring VeloCore Technology for mid launch and balanced spin. Custom built by a Fujikura Diamond Dealer."
+            },
+            {
+              "title": "Ventus Blue Velocore 6S | SidelineSwap | Buy and Sell on ...",
+              "href": "https://sidelineswap.com/gear/golf/golf-shafts/9411318-fujikura-ventus-blue-velocore-6s",
+              "body": "Affordable Golf Shafts from fellow athletes. SidelineSwap connects buyers with quality used gear. Streamlined selling process."
+            },
+            {
+              "title": "Fujikura Ventus Blue Velocore 6-S 65g Stiff 44.5\" Driver ...",
+              "href": "https://www.mikesgolfoutlet.com/fujikura-ventus-blue-velocore-6-s-65g-stiff-44-5-driver-shaft-taylormade-qi10/",
+              "body": "Fujikura Ventus Blue Velocore 6-S 65G Stiff 44.5\" Driver Shaft Taylormade Qi10."
+            }
+          ]
+        }
+      ],
+      "state": "incomplete",
+      "error": "DDGSException: No results found."
+    }
+  ],
+  "finished_at": "2026-11-18T14:08:00.076609+00:00"
+}

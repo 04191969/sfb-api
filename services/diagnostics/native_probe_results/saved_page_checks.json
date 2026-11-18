@@ -1,0 +1,29 @@
+[
+  {
+    "source": "titleist/001",
+    "url": "https://www.globalgolf.com/golf-clubs/1090813-titleist-gts4-driver/",
+    "readable": true,
+    "price": 699.99,
+    "status": "unconfirmed",
+    "evidence": "",
+    "admitted_url": false
+  },
+  {
+    "source": "ventus/003",
+    "url": "https://nextroundgolf.com/products/fujikura-ventus-velocore-blue-driver-shaft-stiff-flex-44-5-in-1",
+    "readable": true,
+    "price": 199.99,
+    "status": "unconfirmed",
+    "evidence": "",
+    "admitted_url": false
+  },
+  {
+    "source": "ventus/004",
+    "url": "https://sidelineswap.com/gear/golf/golf-shafts/9411318-fujikura-ventus-blue-velocore-6s",
+    "readable": true,
+    "price": 190.0,
+    "status": "unconfirmed",
+    "evidence": "",
+    "admitted_url": false
+  }
+]
