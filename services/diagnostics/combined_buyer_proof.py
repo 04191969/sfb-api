@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import urlencode,urlsplit
 from bs4 import BeautifulSoup
 from engine_capture_matrix import probe
+from buyer_candidate_selection import order
 from buyer_discovery_steps12 import walk,canonical,BUY
 QUERIES=['"WTB" forum','"want to buy" classifieds','"looking to buy" forum']
 ENGINES=[('OceanHero','https://oceanhero.today/web','q'),('Daum','https://search.daum.net/search','q')]
@@ -83,7 +84,7 @@ def execute(out,state_path):
     broad=state.setdefault('broad_route',{})
     # Cross-route deduplication shares visited thread IDs, not production state.
     broad['visited']=sorted(set(broad.get('visited',[]))|set(board_state.get('visited',[])))
-    seeds=[];searchdir=out/'searches';searchdir.mkdir()
+    seeds=[];titles={};searchdir=out/'searches';searchdir.mkdir()
     for engine in ENGINES:
      for query in QUERIES:
       print('Search: '+engine[0]+' '+query,flush=True)
@@ -92,11 +93,14 @@ def execute(out,state_path):
       html=(searchdir/row['capture_folder']/'page.html')
       row['extracted_results']=links(html.read_text(encoding='utf-8'),engine[0]) if html.exists() else []
       for hit in row['extracted_results']:
-       if BUY.search(hit['title']):seeds.append(hit['url'])
+       if BUY.search(hit['title']):
+        seeds.append(hit['url']);titles[hit['url']]=hit['title']
       report['searches'].append(row);save()
       print('  '+str(len(row['extracted_results']))+' result links',flush=True)
     prepare(broad,seeds,[])
-    prioritize_direct(broad)
+    for entry in broad['pending']:
+     entry['title']=entry.get('title') or titles.get(entry['url'],'')
+    order(broad,report)
     before=len(report['pages']);walk([],fetch,broad,report,save,max_pages=6,max_ads_per_source=2)
     for e in report['pages'][before:]:e['route']='broad_search'
     board_state['visited']=sorted(set(board_state.get('visited',[]))|set(broad.get('visited',[])))

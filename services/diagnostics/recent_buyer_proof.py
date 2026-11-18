@@ -4,6 +4,7 @@ from datetime import datetime,timezone,timedelta
 from pathlib import Path
 import combined_buyer_proof as discovery
 from prove_reader_handoff import run as read_one
+from buyer_candidate_selection import bootstrap
 
 def recent(source,now):
  stamp=source.get('posted_at')
@@ -20,7 +21,9 @@ def execute(home,out):
  now=datetime.now(timezone.utc)
  # Product-free phrases retained; date cues supplement, never prove an ad's age.
  discovery.QUERIES=[f'"WTB" "{now.strftime("%B %Y")}"',f'"want to buy" "{now.year}"',f'"looking to buy" "{now.strftime("%B %Y")}"','"WTB" forum','"want to buy" classifieds','"looking to buy" forum']
- report=discovery.execute(out,out/'diagnostic-state.json')
+ state_path=home/'SFB_Recent_Buyer_Proof_State'/'state.json'
+ bootstrap(home,state_path)
+ report=discovery.execute(out,state_path)
  report['recency_rule']='90 days from original-post timestamp; recency does not confirm current buying intent.'
  report['reader_checks']=[];report['paid_calls_dispatched']=0
  def save():
