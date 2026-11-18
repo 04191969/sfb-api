@@ -21,4 +21,6 @@ def load(state):
     from reader_currency import install as currency
     from seeker_v2.adapter import install as matcher
     discovery(scope);currency(scope);matcher(scope)
+    from discovery_reader.adapter import read
+    scope['read_discovery']=lambda source,direction,client,sb,audit:read(source,direction,client,sb,scope,audit)
     return scope

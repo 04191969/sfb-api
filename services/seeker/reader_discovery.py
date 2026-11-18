@@ -168,6 +168,8 @@ def install(scope):
         queries.insert(1, f'{item} site:craigslist.org')
         if requirements:
             queries.insert(0, f'{item} {requirements} for sale')
+        if scope.get('counterpart_queries') is not None:
+            queries = list(scope['counterpart_queries'])
         groups = [];skipped = []
         for text in dict.fromkeys(queries):
             print('    Listing search: ' + text, flush=True)

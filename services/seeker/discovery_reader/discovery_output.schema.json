@@ -1,0 +1,114 @@
+{
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "hold"
+      ]
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "find_sellers",
+        "find_buyers"
+      ]
+    },
+    "interpretation": {
+      "type": "string"
+    },
+    "quotations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "supports": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "supports"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "queries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "quotation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "text",
+          "rationale",
+          "quotation_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "text_sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "capture_id",
+        "text_sha256"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "state",
+    "direction",
+    "interpretation",
+    "quotations",
+    "queries",
+    "unresolved",
+    "source_limitations",
+    "source"
+  ],
+  "additionalProperties": false
+}

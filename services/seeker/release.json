@@ -1,6 +1,6 @@
 {
   "component": "seeker",
-  "release_id": "split-bea3977-seeker-native-1",
+  "release_id": "split-bea3977-seeker-native-2",
   "baseline": "bea39775a007c5153dcedd5a241f1470a119c078",
   "v2_version": "7dc98a6e9b8e289d9ca4e0adbd4d9242898d0815e0dfaa6afe005ebb4649077c",
   "files": {
@@ -21,15 +21,24 @@
     "runtime.py": "a21cf978f0a257e1a91ad7aee575c87a80188e3b0b7b6b41e230cdb75b15d858",
     "railway_ebay_transport.py": "a41123696afe6796ee5f671aeb5651340e278ee7148152a32c4b454269e76d78",
     "five_step_package_hashes.json": "5ac6a36c4bc0a38c96ad689024d9758844c237fed377a505b2701357b0a8337d",
-    "native_discovery.py": "30836ea5635a74b014983d8ec63a6317b5b93991fa02e9fb3e79778b1fae8d6e",
+    "native_discovery.py": "a6083e4755395daa588ecbfad6b6ccdddb4b495b28745c7b3a55acf22b3f0684",
     "owner_api_bridge.py": "57094ed8834ca7cadb86bb40abaa8c24d1e049f14d3dfa2be35e3db220bc42c2",
-    "reader_discovery.py": "b7330a3c3607bcd98f031bd17e75e1079ac9e0a7b19032fdc514476b425ff2a6",
-    "native_reader.py": "6ddf6c818d8e596c0c1d4aa191a2fd47b9f44b2e08750580edb25244b8f5c5e0",
+    "reader_discovery.py": "742139187b533ed922f383f2e2f065e30520098680d3ef6c23e579fef266967a",
+    "native_reader.py": "99061da03f8b91778b6f84cdc847ecc80f9c79f1403871a647769424860ca0fe",
     "seeker_v2/shared_rules.py": "7ebbff1a94586bad0aa364ecd37b69741b7599fa032b079bea108ea891f21d18",
     "seeker_v2/reading_contract.py": "2c69bf5fb55012ed491cfb3d6c6fddd57a69c1b0483bde8db79b8d5e647cd171",
     "seeker_v2/adapter.py": "7584181e00c952079d0b2c21b651d31a16a46128d6e2a975a416a3f3a2fc0cc5",
     "seeker_v2/__init__.py": "d998c143a68e5d3f06e330ae7a777b0427b374adabaee83bd2a09a14724f9164",
     "seeker_v2/request_template.json": "6007c7c33a1270d4f7a6736a7ba736ae216fd5f53b938a7fba982dc95bd90009",
-    "seeker_v2/INTEGRITY.json": "77deabdc2afcef46d7c0bc080dd5a605526e1254c787c4451b00ff9826c7dedd"
+    "seeker_v2/INTEGRITY.json": "77deabdc2afcef46d7c0bc080dd5a605526e1254c787c4451b00ff9826c7dedd",
+    "discovery_reader/discovery_input.schema.json": "ec50f4ed91493d37b3e3acb84ec5b6888108324c9644a06de32e98f8a0ca8c51",
+    "discovery_reader/shape.py": "b2d3ef0197755c0e39e0926efa397716ae902100d647aff5c70bbd56fec2e983",
+    "discovery_reader/discovery_output.schema.json": "203bec3cc709c510f3fb7b723663051c861801d89817117c8d589cc84413d3c7",
+    "discovery_reader/discovery_instruction.txt": "b7ba5821c806d3bc36af9754322e992d44ac1fdea9e361e44ef80e64a1d01eb3",
+    "discovery_reader/adapter.py": "480342027064cd98ad50f02672d6b27b6ac835a95ec94fa62248a5b1d120d0a0",
+    "discovery_reader/PROVENANCE.json": "62cf7e677e6ae0d813a6d811a058f8727ccb58511a183ffd96d3ca7d2b7dd8bb",
+    "discovery_reader/contract.py": "7f1fc47092fdb4cd155c1fd61e2219de83dbf252a5cf930ff93591e5e4cd939b",
+    "discovery_reader/settings.json": "2b4c65b95bf542a5485337d64ff203ca4c826319c942617e2145b341a71d4095",
+    "discovery_reader/__init__.py": "c3f28fe01eee9202cc1c3301ed3a7c3726f3f17102d185e372fff77cdc3dad26"
   }
 }

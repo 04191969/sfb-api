@@ -55,13 +55,26 @@ def cycle(scope,client,seen,report,persist,publish,queries):
             except ValueError as exc:
                 report['skipped'].append(dict(url=url,reason=str(exc)));persist();continue
             report['buyers'].append(buyer);persist()
-            # Retrieval query is derived only from the original post's title.
-            # V2 receives the full original request, not this query.
+            reading_record={'buyer_url':url}
+            report.setdefault('discovery_readings',[]).append(reading_record)
+            def audit(record):
+                reading_record.update(record);persist()
+            try:
+                reading=scope['read_discovery'](buyer,'find_sellers',client,report.get('_sb'),audit)
+            except (ValueError,TypeError,KeyError) as exc:
+                reading_record.update(state='invalid',error=str(exc))
+                report['incomplete'].append('Discovery reading failed validation');persist();continue
+            reading_record['reading']=reading;persist()
+            if reading['state']!='ready':
+                report['skipped'].append(dict(url=url,reason=reading['interpretation']));continue
+            # Reader queries guide retrieval only. V2 still gets both originals.
+            previous_queries=scope.get('counterpart_queries')
+            scope['counterpart_queries']=[q['text'] for q in reading['queries']]
             requested_item=scope['requested_item']
             scope['requested_item']=lambda text,b=buyer: b['query'] if text==b['text'] else requested_item(text)
             try:
                 found=scope['search_listings'](buyer['query'],seen,max_keep=8,buyer_text=buyer['text'])
-                report['seller_searches'].append(dict(buyer_url=url,query=buyer['query'],result=found));persist()
+                report['seller_searches'].append(dict(buyer_url=url,queries=scope['counterpart_queries'],result=found));persist()
                 if found.get('incomplete'):report['incomplete'].append(found['incomplete'])
                 for seller in found['listings']:
                     if assessments>=9 or time.monotonic()-began>600:
@@ -76,7 +89,10 @@ def cycle(scope,client,seen,report,persist,publish,queries):
                         if not match_id:raise RuntimeError('Match persistence did not return an id')
                         report.update(match_id=match_id,new_matches=int(created),still_valid=int(not created),state='completed')
                         scope['mark_seen'](seen,url,buyer['title']);scope['mark_seen'](seen,seller['url'],seller.get('title',''));return
-            finally:scope['requested_item']=requested_item
+            finally:
+                scope['requested_item']=requested_item
+                if previous_queries is None:scope.pop('counterpart_queries',None)
+                else:scope['counterpart_queries']=previous_queries
             scope['mark_seen'](seen,url,buyer['title'])
             persist()
     report['state']='incomplete' if report['incomplete'] else 'no_qualifying_match'

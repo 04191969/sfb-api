@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "properties": {
+    "direction": {
+      "type": "string",
+      "enum": [
+        "find_sellers",
+        "find_buyers"
+      ]
+    },
+    "author_text": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "capture_id": {
+          "type": "string"
+        },
+        "text_sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "capture_id",
+        "text_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "source_limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "direction",
+    "author_text",
+    "source",
+    "source_limitations"
+  ],
+  "additionalProperties": false
+}

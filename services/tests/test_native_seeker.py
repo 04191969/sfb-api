@@ -21,7 +21,7 @@ class Tests(unittest.TestCase):
   self.assertNotIn('import five_step_host',text)
   self.assertIn('native_discovery.run_claimed(sb, openai_client, seen, run)',text)
  def test_reader_copies_are_independent_and_provenance_preserved(self):
-  for original,owned in [('live_matches_f972a58.bat','reader_baseline.bat'),('live_matches_discovery.py','reader_discovery.py')]:
+  for original,owned in [('live_matches_f972a58.bat','reader_baseline.bat')]:
    a=ROOT/'live_matches'/original;b=ROOT/'seeker'/owned
    self.assertEqual(a.read_bytes(),b.read_bytes())
    self.assertNotEqual(a.stat().st_ino,b.stat().st_ino)
@@ -33,7 +33,7 @@ class Tests(unittest.TestCase):
   calls=[]
   buyerurl='https://forum.example/threads/10000-wtb-guitar'
   seller=dict(url='https://seller.example/item/1',title='Example guitar',text='seller excerpt',page_text='full seller page')
-  scope={'ddg_text':lambda *a,**k:[dict(href=buyerurl,title='WTB Example guitar',body='not source')],
+  scope={'read_discovery':lambda *a:dict(state='ready',queries=[dict(text='Example guitar blue for sale')]),'ddg_text':lambda *a,**k:[dict(href=buyerurl,title='WTB Example guitar',body='not source')],
    'is_seen':lambda *a:False,'read_listing_html':lambda url:'<h1>WTB Example guitar</h1><div class="message-body">Must be blue.</div>',
    'requested_item':original,'search_listings':lambda *a,**k:dict(listings=[seller],incomplete=''),
    'qualifies':lambda *a:True,'ai_evaluate_match':lambda b,s,c,sb,allow:calls.append((b,s,allow)) or dict(match=True),
@@ -43,6 +43,8 @@ class Tests(unittest.TestCase):
   self.assertEqual(report['state'],'completed');self.assertEqual(report['match_id'],'match-1')
   self.assertEqual(calls,[('WTB Example guitar\nMust be blue.','seller excerpt',False)])
   self.assertIs(scope['requested_item'],original)
+  self.assertNotIn('counterpart_queries',scope)
+  self.assertEqual(report['seller_searches'][0]['queries'],['Example guitar blue for sale'])
  def test_owned_v2_receives_opened_page_not_search_excerpt(self):
   from seeker_v2 import adapter
   calls=[]
@@ -59,6 +61,19 @@ class Tests(unittest.TestCase):
   self.assertEqual(json.loads(calls[0]['input']),{'buyer_text':'Original buyer text','seller_text':page})
   self.assertEqual(calls[0]['model'],'gpt-5.4-2026-03-05')
   self.assertFalse(result['match'])
+ def test_reader_uses_discovery_queries_exactly(self):
+  fake_sb=types.ModuleType('supabase');fake_sb.create_client=lambda *a:None
+  fake_oa=types.ModuleType('openai');fake_oa.OpenAI=object
+  fake_dd=types.ModuleType('ddgs');fake_dd.DDGS=object
+  with patch.dict(sys.modules,{'supabase':fake_sb,'openai':fake_oa,'ddgs':fake_dd}),tempfile.TemporaryDirectory() as folder:
+   scope=native_reader.load(folder);calls=[]
+   scope['counterpart_queries']=['Example Q2 guitar for sale','Example Q2 blue guitar for sale']
+   scope['ddg_text']=lambda q,**kw:calls.append(q) or [dict(title='Example Q2 guitar',body='Example Q2',href='https://example.com/item/123')]
+   scope['listing_seeds']=lambda *a:[]
+   scope['expand_candidates']=lambda *a:([],'')
+   scope['time']=types.SimpleNamespace(sleep=lambda *a:None)
+   scope['search_listings']('Example Q2',{},buyer_text='Item: Example Q2')
+   self.assertEqual(calls,scope['counterpart_queries'])
  def test_real_owned_reader_loads_without_five_step_or_live_imports(self):
   fake_sb=types.ModuleType('supabase');fake_sb.create_client=lambda *a:None
   fake_oa=types.ModuleType('openai');fake_oa.OpenAI=object

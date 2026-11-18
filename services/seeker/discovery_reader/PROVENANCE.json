@@ -1,0 +1,14 @@
+{
+  "source": "Seeker_locked_v0_9_1_plus_QQ2/sfb_program/discovery_contract.py and specification; existing services/seeker/continuation.py allowance and quote instruction",
+  "model": "gpt-5.4-2026-03-05",
+  "reasoning": "medium",
+  "files": {
+    "discovery_input.schema.json": "ec50f4ed91493d37b3e3acb84ec5b6888108324c9644a06de32e98f8a0ca8c51",
+    "shape.py": "b2d3ef0197755c0e39e0926efa397716ae902100d647aff5c70bbd56fec2e983",
+    "discovery_output.schema.json": "203bec3cc709c510f3fb7b723663051c861801d89817117c8d589cc84413d3c7",
+    "discovery_instruction.txt": "b7ba5821c806d3bc36af9754322e992d44ac1fdea9e361e44ef80e64a1d01eb3",
+    "contract.py": "7f1fc47092fdb4cd155c1fd61e2219de83dbf252a5cf930ff93591e5e4cd939b",
+    "settings.json": "2b4c65b95bf542a5485337d64ff203ca4c826319c942617e2145b341a71d4095",
+    "__init__.py": "c3f28fe01eee9202cc1c3301ed3a7c3726f3f17102d185e372fff77cdc3dad26"
+  }
+}
