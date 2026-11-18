@@ -24,7 +24,8 @@ def execute(control):
     # Subclass the execution boundary only. Locked payloads, queries, transports,
     # validation, local ledger and live provenance stay on the inherited path.
     from continuation import ContinuationMixin
-    class ReservedRun(ContinuationMixin, OwnerApiBridge, factory):
+    from broad_discovery import BroadDiscoveryMixin
+    class ReservedRun(BroadDiscoveryMixin, ContinuationMixin, OwnerApiBridge, factory):
         def __init__(self, *args, **kwargs):
             # Supply the browser before ApiRun wraps it for API seller details.
             super().__init__(*args, public_browser=PublicSearchBrowser, handoff=locked.handoff, **kwargs)

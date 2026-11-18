@@ -116,7 +116,7 @@ class ContinuationMixin:
      terms=tokens(' '.join(queries));self.r['seller_link_count']=0;self.r['seller_candidates']=[]
      for query_number,q in enumerate(queries,1):
       self.boundary()
-      if self.r['seller_counts']['page_visits_attempted']>=9:raise RunLimitReached('Nine-seller-page visit limit reached; remaining queries were not evaluated')
+      if self.r['seller_counts']['page_visits_attempted']+self.r.get('public_page_counts',{}).get('seller',0)>=9:raise RunLimitReached('Nine-seller-page visit limit reached; remaining queries were not evaluated')
       need(not excluded(q),'Reader query is outside the test categories')
       self.event('Seller search started',query=q,query_number=query_number)
       rows=self.search(q,'seller');counts['returned_rows']+=len(rows)
@@ -136,7 +136,7 @@ class ContinuationMixin:
       while position<len(leads):
        score,row=leads[position];position+=1
        self.boundary()
-       if self.r['seller_counts']['page_visits_attempted']>=9:raise RunLimitReached('Nine-seller-page visit limit reached; remaining candidates were not evaluated')
+       if self.r['seller_counts']['page_visits_attempted']+self.r.get('public_page_counts',{}).get('seller',0)>=9:raise RunLimitReached('Nine-seller-page visit limit reached; remaining candidates were not evaluated')
        processed.add(seller_identity(row['url']));deferred.pop(seller_identity(row['url']),None)
        counts['candidates_considered']+=1
        self.event('Seller candidate processing started',url=row['url'],query_number=query_number,query_candidate_position=position,overall_processing_position=counts['candidates_considered'])
@@ -246,6 +246,28 @@ class ContinuationMixin:
      self.event('Seller queries exhausted for buyer',buyer_url=buyer['url'])
      self.persist();return None
 
+    def iter_pairs(self, key):
+        for buyer in self.iter_buyers():
+            self.r['buyers_evaluated'] += 1
+            packet = dict(direction='find_sellers', author_text=buyer['author_text'],
+                source={k:buyer[k] for k in ('url','capture_id','text_sha256')},
+                source_limitations=buyer['limitations'])
+            body = discovery_body(packet)
+            res = self.ledger.reserve(plan(body,'discovery'),'discovery',True)
+            self.r['steps']['reader'] = self.r['reader_execution'] = 'running'
+            output = validate_output(self.model('discovery',body,key,res),packet)
+            self.r['reader'] = output
+            self.r['steps']['reader'] = self.r['reader_execution'] = 'completed'
+            self.r['reader_outcome'] = output['state']
+            if output['state'] != 'ready':
+                self.event('Buyer held by reader; continuing', buyer_url=buyer['url'])
+                continue
+            self.r['buyer_counts']['reader_ready_results'] += 1
+            self.r['steps']['find_wtb'] = 'completed'
+            self.r['steps']['find_seller'] = 'running'
+            for seller in self.iter_sellers([q['text'] for q in output['queries']],buyer):
+                yield buyer, seller
+
     def execute(self, key='', ceiling='1.00', search_only=False):
         need(not self.closed, 'Run already attempted; implicit resume or retry prohibited')
         self.closed = True
@@ -256,7 +278,7 @@ class ContinuationMixin:
         self.r['selection']['policy'] = 'first_v2_send_within_existing_limits'
         self.r['selection']['disclosure'] = 'Candidates are assessed in order; non-Send decisions continue the queue.'
         attempted_pairs = set()
-        buyer_count = 0
+        pairs = None
         try:
             if not search_only:
                 need(bool(key.strip()), 'API key is required in local setup; not written to reports')
@@ -276,64 +298,45 @@ class ContinuationMixin:
                 self.event('Checking eBay API authentication')
                 self.api.authenticate()
                 self.r['steps']['find_wtb'] = 'running'
-                for buyer in self.iter_buyers():
-                    buyer_count += 1
+                if search_only:
+                    found = next(self.iter_buyers(), None)
+                    self.r.update(state="search_only_complete",reason="WTB diagnostic only",buyer=found)
+                    return self.r
+                pairs = self.iter_pairs(key)
+                for buyer, seller in pairs:
                     self.boundary()
-                    self.r['buyers_evaluated'] = buyer_count
-                    if search_only:
-                        self.r.update(state='search_only_complete', reason='WTB discovery diagnostic only')
-                        return self.r
-                    packet = dict(direction='find_sellers', author_text=buyer['author_text'],
-                        source={k:buyer[k] for k in ('url','capture_id','text_sha256')},
-                        source_limitations=buyer['limitations'])
-                    body = discovery_body(packet)
-                    res = self.ledger.reserve(plan(body,'discovery'),'discovery',True)
-                    self.r['steps']['reader'] = self.r['reader_execution'] = 'running'
-                    output = validate_output(self.model('discovery',body,key,res),packet)
-                    self.r['reader'] = output
-                    self.r['steps']['reader'] = self.r['reader_execution'] = 'completed'
-                    self.r['reader_outcome'] = output['state']
-                    if output['state'] != 'ready':
-                        self.event('Buyer held by reader; continuing', buyer_url=buyer['url'])
+                    identity = sha(encode([buyer['url'],buyer['text_sha256'],seller['url'],seller['text_sha256']]))
+                    if identity in attempted_pairs:
+                        self.event('Duplicate pair skipped', pair_id=identity)
                         continue
-                    self.r['buyer_counts']['reader_ready_results'] += 1
-                    self.r['steps']['find_wtb'] = 'completed'
-                    self.r['steps']['find_seller'] = 'running'
-                    for seller in self.iter_sellers([q['text'] for q in output['queries']],buyer):
-                        self.boundary()
-                        identity = sha(encode([buyer['url'],buyer['text_sha256'],seller['url'],seller['text_sha256']]))
-                        if identity in attempted_pairs:
-                            self.event('Duplicate pair skipped', pair_id=identity)
-                            continue
-                        attempted_pairs.add(identity)
-                        pair = dict(pair_id=identity,buyer=buyer,seller=seller)
-                        facts = dict(buyer_text=buyer['author_text'],seller_text=seller['author_text'])
-                        body = encode(locked.payload(facts,'B'))
-                        res = self.ledger.reserve(plan(body,'matcher'),'matcher',True)
-                        self.r['steps']['matcher'] = 'running'
-                        answer = self.model('matcher',body,key,res)
-                        valid = locked.validate_answer(answer,facts)
-                        self.r['steps']['matcher'] = 'completed'
-                        assessment = dict(pair=pair,matcher_answer=answer,validated=valid)
-                        self.r['assessments'].append(assessment)
-                        self.r.update(pair=pair,matcher_answer=answer,validated=valid,decision=answer['decision'])
-                        save(self.folder/'HANDOFF_INPUT.json',assessment)
-                        number = len(self.r['assessments'])
-                        self.handoff(self.folder/'HANDOFF_INPUT.json',self.folder/f'admin_review_{number:03d}')
-                        self.r['admin_review'] = json.loads((self.folder/f'admin_review_{number:03d}'/'HANDOFF_REPORT.json').read_text())
-                        self.persist()
-                        if answer['decision'] == 'Send':
-                            self.r['selection']['disclosure'] = 'First V2 Send selected for administrator review; later offers were not compared.'
-                            self.r.update(state='completed',pipeline_completed=True,
-                                reason=f'V2 Send saved for review after {number} assessments; no introduction sent')
-                            return self.r
-                        self.r['selection'].update(status='continuing_after_non_send',
-                            disclosure='Non-Send assessment saved; continuing remaining candidates and queries.')
-                        self.event('Assessment withheld; continuing seller queue',
-                            buyer_url=buyer['url'],seller_url=seller['url'],decision=answer['decision'],reason=valid['Reason'])
-                    self.event('Seller candidates exhausted; continuing buyer queue',buyer_url=buyer['url'])
+                    attempted_pairs.add(identity)
+                    pair = dict(pair_id=identity,buyer=buyer,seller=seller)
+                    facts = dict(buyer_text=buyer['author_text'],seller_text=seller['author_text'])
+                    body = encode(locked.payload(facts,'B'))
+                    res = self.ledger.reserve(plan(body,'matcher'),'matcher',True)
+                    self.r['steps']['matcher'] = 'running'
+                    answer = self.model('matcher',body,key,res)
+                    valid = locked.validate_answer(answer,facts)
+                    self.r['steps']['matcher'] = 'completed'
+                    assessment = dict(pair=pair,matcher_answer=answer,validated=valid)
+                    self.r['assessments'].append(assessment)
+                    self.r.update(pair=pair,matcher_answer=answer,validated=valid,decision=answer['decision'])
+                    save(self.folder/'HANDOFF_INPUT.json',assessment)
+                    number = len(self.r['assessments'])
+                    self.handoff(self.folder/'HANDOFF_INPUT.json',self.folder/f'admin_review_{number:03d}')
+                    self.r['admin_review'] = json.loads((self.folder/f'admin_review_{number:03d}'/'HANDOFF_REPORT.json').read_text())
+                    self.persist()
+                    if answer['decision'] == 'Send':
+                        self.r['selection']['disclosure'] = 'First V2 Send selected for administrator review; later offers were not compared.'
+                        self.r.update(state='completed',pipeline_completed=True,
+                            reason=f'V2 Send saved for review after {number} assessments; no introduction sent')
+                        return self.r
+                    self.r['selection'].update(status='continuing_after_non_send',
+                        disclosure='Non-Send assessment saved; continuing remaining candidates and queries.')
+                    self.event('Assessment withheld; continuing seller queue',
+                        buyer_url=buyer['url'],seller_url=seller['url'],decision=answer['decision'],reason=valid['Reason'])
                 self.r.update(state='no_qualifying_match',pipeline_completed=True,
-                    reason=f'No V2 Send in {len(self.r["assessments"])} assessments across {buyer_count} buyers; checked queues exhausted. This does not establish no sellers exist.')
+                    reason=f'No V2 Send in {len(self.r["assessments"])} assessments across {self.r["buyers_evaluated"]} buyers; checked queues exhausted. This does not establish no sellers exist.')
                 return self.r
         except Exception as exc:
             from spending import BudgetHold
@@ -343,6 +346,7 @@ class ContinuationMixin:
             self.r.update(state=state,reason=reason[:1500],error_type=type(exc).__name__)
             return self.r
         finally:
+            if pairs is not None: pairs.close()
             for step,value in self.r['steps'].items():
                 if value == 'running': self.r['steps'][step] = self.r['state']
             if self.r['reader_execution'] == 'running':
