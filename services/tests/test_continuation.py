@@ -71,6 +71,28 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual(r['state'],'completed',r.get('reason'))
         self.assertEqual(len(r['assessments']),2)
         self.assertIn(('search','Example guitar used'),run.calls)
+    def test_unreadable_seller_records_http_error_and_continues(self):
+        original=Browser.visit
+        def visit(browser,url,purpose,parent=None):
+            if url==row(1)['url']:raise c.Held('HTTP 403')
+            return original(browser,url,purpose,parent)
+        with patch.object(Browser,'visit',visit):
+            run,r=self.run_case(stocks=[2])
+        self.assertEqual(r['state'],'completed',r.get('reason'))
+        self.assertEqual(r['screening'][-1]['http_status'],403)
+        self.assertEqual(r['screening'][-1]['outcome'],'access_failure')
+        self.assertEqual(len(r['assessments']),1)
+    def test_invalid_seller_capture_records_reason_and_continues(self):
+        original=Browser.visit
+        def visit(browser,url,purpose,parent=None):
+            page=original(browser,url,purpose,parent)
+            if url==row(1)['url']:page['source_text']=''
+            return page
+        with patch.object(Browser,'visit',visit):
+            run,r=self.run_case(stocks=[2])
+        self.assertEqual(r['state'],'completed',r.get('reason'))
+        self.assertEqual(r['screening'][-1]['outcome'],'capture_failure')
+        self.assertNotIn('http_status',r['screening'][-1])
     def test_next_buyer_after_exhaustion(self):
         run,r=self.run_case(queries={'Example guitar for sale':[row(1)]},stocks=[1,2],buyers=2)
         self.assertEqual(r['state'],'completed',r.get('reason'))

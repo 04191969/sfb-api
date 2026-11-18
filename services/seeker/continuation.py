@@ -9,7 +9,7 @@ from automatic_run import (BROAD, record, now, sha, save, tokens, excluded, WANT
     discovery_body, validate_output, encode, need, plan, money, P, real_transport)
 from spending import Ledger
 from mercedes_route import Route
-import json, zipfile
+import json, re, zipfile
 from discovery_contract import response_object
 from discovery_contract import locked as original_locked
 parse_response = original_locked.parse
