@@ -69,11 +69,14 @@ class BroadDiscoveryMixin:
         self.r['searches'].append(dict(purpose=side,query=query,results=rows,provider='public search'))
         self.persist();return rows
 
-    def public_sources(self,query,side,root=False):
+    def public_sources(self,query,side,root=False,exclude_urls=()):
+        excluded_sources={self.buyer_screen.canonical_url(u) for u in exclude_urls}
         rows=self.public_search(query,side)
         queue=[(r,0) for r in rows];seen=set();opened=0
         while queue:
             row,depth=queue.pop(0);url=self.buyer_screen.canonical_url(row['url'])
+            if url in excluded_sources:
+                self.event("Originating source skipped",url=url,side=side);continue
             if url in seen:continue
             seen.add(url)
             kind,reason=classify(row)
@@ -89,9 +92,15 @@ class BroadDiscoveryMixin:
             # Two seed pages per query lets other broad wording get a turn.
             if root and opened>=2:
                 self.r['discovery_coverage_limited']=True;break
-            count=self.r['public_page_counts'][side] + (self.r['seller_counts']['page_visits_attempted'] if side=='seller' else 0)
-            if count >= (8 if side=='buyer' else 9):raise RunLimitReached('Shared '+side+' page allowance reached')
-            self.r['public_page_counts'][side]+=1;opened+=1;page=None
+            if kind=='directory':
+                # Directory navigation remains bounded by the existing global
+                # 32-navigation / 1,200-request / time limits, not ad allowances.
+                self.r['directory_page_visits']=self.r.get('directory_page_visits',0)+1
+            else:
+                count=self.r['public_page_counts'][side] + (self.r['seller_counts']['page_visits_attempted'] if side=='seller' else 0)
+                if count >= (8 if side=='buyer' else 9):raise RunLimitReached('Shared '+side+' individual-ad page allowance reached')
+                self.r['public_page_counts'][side]+=1
+            opened+=1;page=None
             self.boundary()
             try:
                 # SellerApiBrowser routes purpose=seller to eBay; use the wrapped
@@ -103,6 +112,9 @@ class BroadDiscoveryMixin:
                     source=None
                 else:
                     page=public.visit(url,side,row.get('parent'))
+                    if self.buyer_screen.canonical_url(page['url']) in excluded_sources:
+                        self.event('Redirect to originating source skipped',url=page['url'],side=side)
+                        continue
                     source=source_record(page,side)
             except RunLimitReached:raise
             except (Held,ValueError) as exc:
@@ -135,7 +147,7 @@ class BroadDiscoveryMixin:
         state_dir=Path(os.environ.get('SFB_COMPONENT_STATE',self.folder.parent/'discovery_state'))
         self.discovery_state=DiscoveryState(state_dir/'broad_discovery.sqlite3')
         start=self.discovery_state.start()
-        self.r.update(public_page_counts={'buyer':0,'seller':0},query_rotation_start=start,
+        self.r.update(public_page_counts={'buyer':0,'seller':0},directory_page_visits=0,query_rotation_start=start,
             test_categories=[],scope='Broad WTB and WTS across categories; existing excluded-source rules retained.',
             discovery_queries=[dict(side=s,query=q) for s,q in QUERIES],discovery_coverage_limited=False)
         attempted=set();failures=[]
@@ -151,7 +163,7 @@ class BroadDiscoveryMixin:
                             self.r['buyers_evaluated']+=1
                             counterparts=self.iter_sellers(queries,source)
                         else:
-                            counterparts=(buyer for q in queries for buyer in self.public_sources(q,'buyer'))
+                            counterparts=(buyer for q in queries for buyer in self.public_sources(q,'buyer',exclude_urls=(source['url'],)))
                         for counterpart in counterparts:
                             if side=='seller':
                                 # Confirm the found author's own buying intent before

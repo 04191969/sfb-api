@@ -134,6 +134,47 @@ class Tests(unittest.TestCase):
             _,r,_=self.run_broad()
         self.assertEqual(r['state'],'completed',r.get('reason'))
         self.assertEqual(r['pair']['buyer']['url'],BURL)
+    def test_seller_origin_with_tracking_is_skipped_before_buyer_navigation(self):
+        original=PublicBrowser.search
+        visits=[]
+        original_visit=PublicBrowser.visit
+        def search(browser,query):
+            if query=='Example Q2 guitar wanted':
+                return [dict(url=SURL+'?utm_source=search',title='WTS Example Q2 guitar'),dict(url=BURL,title='WTB Example Q2 guitar')]
+            return original(browser,query)
+        def visit(browser,url,purpose,parent=None):
+            visits.append((url,purpose));return original_visit(browser,url,purpose,parent)
+        with patch.object(PublicBrowser,'search',search),patch.object(PublicBrowser,'visit',visit):
+            _,r,_=self.run_broad(start=1)
+        self.assertEqual(r['state'],'completed',r.get('reason'))
+        self.assertEqual([u for u,p in visits if p=='buyer'],[BURL])
+        self.assertEqual(r['public_page_counts']['buyer'],1)
+    def test_directory_does_not_spend_individual_ad_allowance(self):
+        original=PublicBrowser.search
+        def search(browser,query):
+            if query==QUERIES[0][1]:return [dict(url='https://example.com/categories/wanted',title='Wanted classifieds')]
+            return original(browser,query)
+        def directory(browser,url,parent=None):
+            return dict(url=url,title='Wanted classifieds',links=[dict(url=BURL,title='WTB Example Q2 guitar')])
+        with patch.object(PublicBrowser,'search',search),patch.object(PublicBrowser,'visit_directory',directory,create=True):
+            _,r,_=self.run_broad()
+        self.assertEqual(r['state'],'completed',r.get('reason'))
+        self.assertEqual(r['directory_page_visits'],1)
+        self.assertEqual(r['public_page_counts']['buyer'],1)
+    def test_redirect_back_to_origin_never_becomes_buyer(self):
+        original=PublicBrowser.search
+        original_visit=PublicBrowser.visit
+        alias='https://example.com/thread/wanted-alias'
+        def search(browser,query):
+            if query=='Example Q2 guitar wanted':return [dict(url=alias,title='WTB Example Q2'),dict(url=BURL,title='WTB Example Q2')]
+            return original(browser,query)
+        def visit(browser,url,purpose,parent=None):
+            return page(SURL) if url==alias else original_visit(browser,url,purpose,parent)
+        with patch.object(PublicBrowser,'search',search),patch.object(PublicBrowser,'visit',visit):
+            _,r,_=self.run_broad(start=1)
+        self.assertEqual(r['state'],'completed',r.get('reason'))
+        self.assertEqual(r['pair']['buyer']['url'],BURL)
+        self.assertTrue(any(e['event']=='Redirect to originating source skipped' for e in r['events']))
     def test_current_reader_receives_full_original_and_correct_direction(self):
         _,r,_=self.run_broad(start=1)
         for entry in r['discovery_readings']:
