@@ -32,6 +32,7 @@ class Factory:
 
 seeker_connector.load_runner=lambda *a,**kw:Factory
 sys.modules['automatic_run']=types.ModuleType('automatic_run')
+continuation=types.ModuleType('continuation');continuation.ContinuationMixin=type('ContinuationMixin',(),{});sys.modules['continuation']=continuation
 public=types.ModuleType('public_search_adapter');public.PublicSearchBrowser=object;sys.modules['public_search_adapter']=public
 relay=types.ModuleType('railway_ebay_transport');relay.relay_options=lambda e:{};sys.modules['railway_ebay_transport']=relay
 sb=MagicMock()

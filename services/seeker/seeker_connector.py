@@ -98,24 +98,32 @@ def connect_run(job, output_root, factory, key, ceiling, publish, finish,
         runner = factory(folder, **(runner_options or {}))
         report = runner.execute(key=key, ceiling=ceiling)
         handoff = folder / 'HANDOFF_INPUT.json'
-        if report.get('state') != 'completed':
-            # A stale or partially written handoff never overrides a stopped run.
-            summary = f"{report.get('state', 'stopped')}: {report.get('reason', 'No completed assessment')}"
-            normal_outcomes = {'no_wtb_leads', 'no_readable_wtb',
-                               'no_seller_selected', 'reader_hold'}
-            status = 'completed' if report.get('state') in normal_outcomes else 'failed'
-            finish(run_id, status, summary)
-            return {'published': False, 'report': report}
-        if not handoff.is_file():
-            raise ValueError('Completed run has no handoff')
-        data = validate_handoff(json.loads(handoff.read_text(encoding='utf-8')), locked)
-        if report.get('pair') != data['pair'] or report.get('matcher_answer') != data['matcher_answer']:
-            raise ValueError('Handoff does not match this run report')
-        envelope = {'run_id': run_id, 'handoff': data, 'report': report,
-                    'confidence': None, 'recorded_at': datetime.now(timezone.utc).isoformat()}
-        publish(run_id, envelope)
-        finish(run_id, 'completed', 'Assessment saved for review: ' + data['matcher_answer']['decision'])
-        return {'published': True, 'report': report}
+        published = False
+        # Keep validated partial assessments even when a later limit/transport stops
+        # continuation. Never publish an unvalidated or stale final pair.
+        if handoff.is_file() and report.get('assessments'):
+            data = validate_handoff(json.loads(handoff.read_text(encoding='utf-8')), locked)
+            if report.get('pair') != data['pair'] or report.get('matcher_answer') != data['matcher_answer']:
+                raise ValueError('Handoff does not match this run report')
+            envelope = {'run_id': run_id, 'handoff': data, 'report': report,
+                        'confidence': None, 'recorded_at': datetime.now(timezone.utc).isoformat()}
+            publish(run_id, envelope)
+            published = True
+        elif report.get('state') == 'completed':
+            # Compatibility with existing one-pair fixture runners.
+            if not handoff.is_file(): raise ValueError('Completed run has no handoff')
+            data = validate_handoff(json.loads(handoff.read_text(encoding='utf-8')), locked)
+            if report.get('pair') != data['pair'] or report.get('matcher_answer') != data['matcher_answer']:
+                raise ValueError('Handoff does not match this run report')
+            publish(run_id, {'run_id': run_id, 'handoff': data, 'report': report,
+                'confidence': None, 'recorded_at': datetime.now(timezone.utc).isoformat()})
+            published = True
+        normal = {'completed','no_qualifying_match','no_wtb_leads','no_readable_wtb','no_seller_selected','reader_hold'}
+        state = report.get('state','stopped')
+        summary = report.get('reason') or ('Assessment saved for review: '+data['matcher_answer']['decision'] if published else 'No completed assessment')
+        if state not in normal: summary = 'Search incomplete — '+state+': '+summary
+        finish(run_id, 'completed' if state in normal else 'failed', summary)
+        return {'published': published, 'report': report}
     except Exception as exc:
         # Do not persist arbitrary exception text which may contain credentials.
         finish(run_id, 'failed', 'Connector stopped: ' + type(exc).__name__)

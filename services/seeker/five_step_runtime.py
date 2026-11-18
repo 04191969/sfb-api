@@ -23,7 +23,8 @@ def execute(control):
     key = os.environ['OPENAI_KEY']
     # Subclass the execution boundary only. Locked payloads, queries, transports,
     # validation, local ledger and live provenance stay on the inherited path.
-    class ReservedRun(OwnerApiBridge, factory):
+    from continuation import ContinuationMixin
+    class ReservedRun(ContinuationMixin, OwnerApiBridge, factory):
         def __init__(self, *args, **kwargs):
             # Supply the browser before ApiRun wraps it for API seller details.
             super().__init__(*args, public_browser=PublicSearchBrowser, handoff=locked.handoff, **kwargs)
