@@ -142,7 +142,15 @@ class BroadDiscoveryMixin:
             source={k:source[k] for k in ('url','capture_id','text_sha256')},source_limitations=source['limitations'])
         body=discovery_body(packet)
         reservation=self.ledger.reserve(plan(body,'discovery'),'discovery',True)
-        output=validate_output(self.model('discovery',body,key,reservation),packet)
+        raw_output=self.model('discovery',body,key,reservation)
+        try:
+            output=validate_output(raw_output,packet)
+        except (ValueError,TypeError,KeyError) as exc:
+            # Validate only a received, settled reading here. Transport, usage and
+            # run-limit failures still propagate; invalid evidence is never used.
+            self.r.setdefault('invalid_discovery_readings',[]).append(dict(source=source,output=raw_output,reason=str(exc)))
+            self.event('Discovery reading held',url=source['url'],reason=str(exc))
+            return None
         self.r.setdefault('discovery_readings',[]).append(dict(source=source,output=output))
         return output
 
@@ -160,7 +168,7 @@ class BroadDiscoveryMixin:
                 try:
                     for source in self.public_sources(query,side,root=True):
                         reading=self.read_source(source,key)
-                        if reading['state']!='ready':continue
+                        if reading is None or reading['state']!='ready':continue
                         queries=[q['text'] for q in reading['queries']]
                         if side=='buyer':
                             self.r['buyers_evaluated']+=1
@@ -172,7 +180,7 @@ class BroadDiscoveryMixin:
                                 # Confirm the found author's own buying intent before
                                 # pairing; generated seller queries are not needed here.
                                 other=self.read_source(counterpart,key)
-                                if other['state']!='ready':continue
+                                if other is None or other['state']!='ready':continue
                                 self.r['buyers_evaluated']+=1
                             buyer,seller=(source,counterpart) if side=='buyer' else (counterpart,source)
                             identity=(buyer['url'],buyer['text_sha256'],seller['url'],seller['text_sha256'])
@@ -182,6 +190,7 @@ class BroadDiscoveryMixin:
                             yield buyer,seller
                 except SearchExtractionError as exc:
                     failures.append(str(exc));self.event('Public search incomplete',query=query,reason=str(exc))
-            if failures:raise SearchExtractionError('One or more public searches were blocked or unreadable; see run events')
+            if self.r.get('invalid_discovery_readings'):failures.append('Invalid discovery readings held')
+            if failures:raise SearchExtractionError('Public discovery incomplete: search failures or invalid readings held; see run events')
             if self.r['discovery_coverage_limited']:raise RunLimitReached('Broad query page allowance used; not every candidate was opened')
         finally:self.discovery_state.close()

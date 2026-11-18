@@ -19,10 +19,12 @@ import v2_bridge as locked
 from protected_ledger import estimate
 
 DISCOVERY_OUTPUT_TOKENS = 6000
+EXACT_QUOTE_INSTRUCTION = "\nEvidence copying: Each quotation text must be a nonempty, exact contiguous substring of author_text after JSON decoding. Preserve line breaks, spacing, punctuation and case. Do not join lines or paraphrase within a quotation. Choose a shorter exact substring if needed. This also applies to hold responses."
 
 def discovery_body(packet):
     request = json.loads(pinned_discovery_body(packet))
     request["max_output_tokens"] = DISCOVERY_OUTPUT_TOKENS
+    request["instructions"] += EXACT_QUOTE_INSTRUCTION
     return encode(request)
 
 def plan(body, kind):

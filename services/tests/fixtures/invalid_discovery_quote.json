@@ -1,0 +1,56 @@
+{
+  "packet": {
+    "direction": "find_sellers",
+    "author_text": "WE MAKE THINGS\nBETTER, AND WE MAKE\nBETTER THINGS.\n\nTHE HISTORY OF MOUNTAIN BIKING\n\nThe history of mountain biking is spattered with ingenuity and lathered in innovation. From the peaks of Marin to the Slickrock trail of Moab, the threads that make up this indelible tapestry of…\n\nYou know what? Enough. It’s all been said before. Written, celebrated, evangelized. Mt. Tam, Repack, Klunkers, blah blah blah.\n\nHERE’S THE TRUTH ABOUT OUR ORIGINS.\n\nWe were getting bored, so we made things interesting. What we wanted didn’t exist, so we created it. Once it did exist, it was never good enough. So we kept making it better, and better, and better. Ever since we first started riding sketchy, ill-equipped cruisers down Mt. Tam back in ‘82, we’ve built things better because life is better with bikes. We believe better bikes make for an even better life, so we’ve continued to make components that improve every aspect of the riding experience.\n\nWE’VE BEEN DOING IT FOR OVER 40 YEARS.\n\nIt hasn’t gotten any easier, but luckily it hasn’t gotten any harder. We still do it simply because we love doing it. We’re not perfect, and we’re perfectly fine with that. We’ve seen trends come and go. We’ve seen wheel sizes evolve. We’ve witnessed brakes go from “meh” to “wow”. We’ve even watched mountain bikers ride drop bar bikes. We’re proud that we've built each and every thing we've ever made. They taught us how to build things better.\n\nWHAT WE’RE GETTING AT IS...\n\nWe’ve been doing this for a while. We were here in the beginning and we’ll be here for many years to come. We only say this because we want you to have peace of mind and confidence in your WTB experience. We say this because we love what we do. We make things better and we make better things.\n\n1982\n\nWTB WAS BORN\n\nCreated by Mark Slate, Steve Potts, Charlie Cunningham and Lance Wyeth in Marin, California.\n\n1982\n1983\n1991\n1997\n1999\n2001\n2011\n2014\n2016\n2019\n2020\n2021\n\nFREE SHIPPING $100+\n\nExcluding deliveries to Hawaii and Alaska.\n\n30 DAY RETURN POLICY\n\nReturn any unused product for up to 30 days.\n\nWARRANTY POLICY\n\nWe guarantee our products for at least two years.\n\nNEED HELP?\n\nContact us via the form and we’ll get back to you soon.\n\nWTB, WILDERNESS TRAIL BIKES: CYCLING COMPONENTS SINCE 1982\n\nWTB was founded as Wilderness Trail Bikes in Mill Valley, California back in 1982. Over the last four decades, WTB has developed reliable, high-performance tires, saddles, rims, grips, hubs, wheels and accessories for mountain, gravel and road cyclists.\n\nSUPPORT\n\nWarranty\nUser Manuals and Resources\nFAQs\nTire & Rim Fit Chart\nFit Right Guarantee\nContact Us\nRecalls\nTerms of Service\nReturns and Refunds Policy\nShipping Policy\nPrivacy Policy\n\nSEARCH\n\nSearch\nDealer Locator\nInternational Distributors\nPro Program\nProduct Archive\n\nCOMPANY\n\nAbout WTB\nAdvocacy\nAthletes\nCareers\nPress Releases\nSponsorship Inquiries\n\n© 2026 WTB · SITE BY ECOMMERCE POT",
+    "source": {
+      "url": "https://www.wtb.com/pages/about-us",
+      "capture_id": "browser-6",
+      "text_sha256": "319fcaa0796b6793e13f0314d4d9de7fcb14237ab4c3ae193464abd1aaead7d3"
+    },
+    "source_limitations": [
+      "Automatically selected author region; source age and current availability are unconfirmed.",
+      "Search snippets are leads only; original page text is used for assessment."
+    ]
+  },
+  "output": {
+    "state": "hold",
+    "direction": "find_sellers",
+    "interpretation": "The supplied direction conflicts with the source text. This is an informational brand/about page for WTB that describes the company, its history, support policies, and general product categories, not a post from someone seeking to buy a specific item. Because the author does not identify any particular product they want to purchase, there is no meaningful opposite-party seller search to prepare from this source alone.",
+    "quotations": [
+      {
+        "id": "q1",
+        "text": "WE MAKE THINGS BETTER, AND WE MAKE BETTER THINGS.",
+        "supports": "Shows the page is presenting WTB as a maker/brand rather than expressing a buying request."
+      },
+      {
+        "id": "q2",
+        "text": "We only say this because we want you to have peace of mind and confidence in your WTB experience.",
+        "supports": "Shows the text is brand messaging aimed at customers, not the author seeking to buy a specific item."
+      },
+      {
+        "id": "q3",
+        "text": "WTB was founded as Wilderness Trail Bikes in Mill Valley, California back in 1982. Over the last four decades, WTB has developed reliable, high-performance tires, saddles, rims, grips, hubs, wheels and accessories for mountain, gravel and road cyclists.",
+        "supports": "Identifies broad product categories offered by the company, but not any specific item the author wants to purchase."
+      },
+      {
+        "id": "q4",
+        "text": "30 DAY RETURN POLICY\n\nReturn any unused product for up to 30 days.",
+        "supports": "Shows this is a commerce/support page with store policies, not a wanted listing."
+      }
+    ],
+    "queries": [],
+    "unresolved": [
+      "No specific product, model, size, or other wanted item is identified by the author."
+    ],
+    "source_limitations": [
+      "Automatically selected author region; source age and current availability are unconfirmed.",
+      "Search snippets are leads only; original page text is used for assessment.",
+      "Source is a company/about page rather than a marketplace or wanted post, so author purchase intent and target item are not stated."
+    ],
+    "source": {
+      "url": "https://www.wtb.com/pages/about-us",
+      "capture_id": "browser-6",
+      "text_sha256": "319fcaa0796b6793e13f0314d4d9de7fcb14237ab4c3ae193464abd1aaead7d3"
+    }
+  }
+}

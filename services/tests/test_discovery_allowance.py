@@ -28,7 +28,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(report['state'],'completed',report.get('reason'))
         body=next(body for kind,body in requests if kind=='discovery')
         request=json.loads(body);packet=json.loads(request['input'])
-        old=json.loads(c.pinned_discovery_body(packet));old['max_output_tokens']=6000
+        old=json.loads(c.pinned_discovery_body(packet));old['max_output_tokens']=6000;old['instructions']+=c.EXACT_QUOTE_INSTRUCTION
         self.assertEqual(request,old)
         plan=c.plan(body,'discovery')
         self.assertEqual(plan['max_output_tokens'],6000)

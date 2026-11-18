@@ -13,6 +13,8 @@ def classify(row):
         return 'skip','Author profile, not an ad'
     if re.search(r'/(?:events|calendar|webinars)(?:/|$)',path):
         return 'skip','Event/calendar page, not a goods ad'
+    if re.fullmatch(r'/(?:pages/)?(?:about(?:-us)?|company|company-history|our-story|contact(?:-us)?|privacy-policy|terms-of-service)/?',path):
+        return 'skip','Company information page, not an individual ad'
     if ITEM.search(path):return 'ad','Individual listing route; original evidence still required'
     if path in ('','/') or re.search(r'/marketplace/category/|/(?:categories|search)(?:/|$)',path):
         if AD.search(title+' '+row.get('snippet','')) or re.search(r'\b(?:classifieds|marketplace)\b',title,re.I):
