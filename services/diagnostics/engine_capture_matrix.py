@@ -48,7 +48,7 @@ def probe(browser,entry,index,out):
    if button.count():button.click()
   if not BLOCK.search(text):
    # One bounded render wait, not repeated requests or challenge solving.
-   capture('render_wait',lambda:page.wait_for_function("document.querySelector('h2 a,h3 a,a h3,.result__a') || /temporarily unavailable|verify you are human|captcha/i.test(document.body.innerText)",timeout=6000))
+   capture('render_wait',lambda:page.wait_for_function("() => document.querySelector('h2 a,h3 a,a h3,.result__a,c-title a,.item-title a') || /temporarily unavailable|verify you are human|captcha/i.test(document.body.innerText)",timeout=6000))
  except Exception as e:row['errors']['navigation']=type(e).__name__+': '+str(e)[:500]
  finally:
   if page:
