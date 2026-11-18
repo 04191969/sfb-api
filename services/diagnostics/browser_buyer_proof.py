@@ -26,7 +26,36 @@ def result_links(html, base):
 def eligible(rows):
     return [r['url'] for r in rows if BUY.search(r['title']) and not re.search(r'dictionary|glossary|wikipedia|grokipedia|milsurps', r['url'], re.I)]
 
-def run(out, channel='msedge'):
+class DiagnosticStop(Exception):
+    pass
+
+def capture_page(page, out, row, network):
+    """Best-effort independent captures: one failed capture never hides the rest."""
+    folder = out / 'first-failure'
+    folder.mkdir(exist_ok=True)
+    record = {'url': None, 'title': None, 'navigation_status': row.get('navigation_status'),
+              'network': list(network), 'capture_errors': {}}
+    def attempt(name, action):
+        try:
+            return action()
+        except Exception as exc:
+            record['capture_errors'][name] = type(exc).__name__ + ': ' + str(exc)[:300]
+    record['url'] = attempt('url', lambda: page.url)
+    record['title'] = attempt('title', page.title)
+    attempt('html', lambda: (folder/'page.html').write_text(page.content(), encoding='utf-8'))
+    attempt('text', lambda: (folder/'page.txt').write_text(page.locator('body').inner_text(timeout=3000), encoding='utf-8'))
+    attempt('screenshot', lambda: page.screenshot(path=str(folder/'page.png'), full_page=False, timeout=5000))
+    (folder/'CAPTURE.json').write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
+    row['capture'] = 'first-failure/CAPTURE.json'
+    return record
+
+def network_response(response):
+    # No headers, cookies, request bodies, or query tokens in network diagnostics.
+    p = urlsplit(response.url)
+    return {'url': p.scheme+'://'+p.netloc+p.path, 'status': response.status,
+            'resource_type': response.request.resource_type}
+
+def run(out, channel='msedge', diagnose_first=False):
     out.mkdir(parents=True, exist_ok=False)
     report = {'started_at': datetime.now(timezone.utc).isoformat(), 'state':'running', 'attempts':[], 'pages':[], 'buyers':[], 'failures':[], 'model_calls':0, 'database_writes':0, 'production_changed':False, 'acceptance':'NOT PROVEN', 'limits':{'page_navigation_limit':12,'seconds':300}}
     state={}; started=time.monotonic()
@@ -40,17 +69,28 @@ def run(out, channel='msedge'):
             browser=p.chromium.launch(channel=channel, headless=True)
             context=browser.new_context()
             page=context.new_page(); page.set_default_timeout(12000); page.set_default_navigation_timeout(15000)
-            seeds=[]
+            seeds=[]; network=[]
+            def on_response(response):
+                if len(network)<100 and response.request.resource_type in ('document','xhr','fetch'):
+                    network.append(network_response(response))
+            def on_failed(request):
+                if len(network)<100:
+                    p=urlsplit(request.url)
+                    network.append({'url':p.scheme+'://'+p.netloc+p.path,'failure':request.failure,'resource_type':request.resource_type})
+            page.on('response', on_response); page.on('requestfailed', on_failed)
             for engine, base in ENGINES.items():
                 for query in QUERIES:
                     if time.monotonic()-started>300: raise TimeoutError('Proof time limit; saved partial results retained')
                     row={'engine':engine,'query':query,'results':[]}; report['attempts'].append(row)
                     print('Search: '+engine+' '+query, flush=True)
                     try:
+                        network.clear()
                         response=page.goto(base+quote_plus(query),wait_until='domcontentloaded')
+                        row['navigation_status']=response.status if response else None
                         text=page.locator('body').inner_text()
                         if BLOCK.search(text):
-                            row.update(state='blocked',reason='Visible verification/block page; not bypassed'); break
+                            row.update(state='blocked')
+                            raise DiagnosticStop('Visible verification/block page; not bypassed')
                         # The live proof showed Qwant/Lilo need form submission after the initial shell.
                         if engine in ('qwant','lilo'):
                             page.get_by_role('button',name='Search the web',exact=True).click()
@@ -59,9 +99,15 @@ def run(out, channel='msedge'):
                         row.update(state='results' if rows else 'no_extracted_results',url=page.url,results=rows)
                         seeds.extend(eligible(rows))
                         print('  Result links: '+str(len(rows)),flush=True)
+                        if not rows: raise DiagnosticStop('No external result links extracted')
+                        if diagnose_first:
+                            report.update(state='search_diagnostic_completed',acceptance='Step 1 result links extracted; step 2 not run in this diagnostic')
+                            return report
                     except Exception as exc:
-                        row.update(state='incomplete',reason=type(exc).__name__+': '+str(exc)[:500])
+                        row.update(state=row.get('state','incomplete'),reason=type(exc).__name__+': '+str(exc)[:500])
+                        capture_page(page,out,row,network)
                         print('  '+row['reason'],flush=True)
+                        raise DiagnosticStop('First search failure captured; remaining searches not started') from exc
                     finally: save()
             # Round-robin by source avoids spending the whole proof on one forum.
             unique=[]; hosts=set(); later=[]
@@ -86,10 +132,12 @@ def run(out, channel='msedge'):
     finally:
         report['finished_at']=datetime.now(timezone.utc).isoformat(); save()
         with zipfile.ZipFile(out/'SEND_THIS_REPORT.zip','w',zipfile.ZIP_DEFLATED) as z:
-            z.write(out/'REPORT.json','REPORT.json'); z.write(out/'STATE.json','STATE.json')
+            for file in sorted(out.rglob('*')):
+                if file.is_file() and file.name!='SEND_THIS_REPORT.zip':
+                    z.write(file,str(file.relative_to(out)))
         print('Results: '+str(out/'SEND_THIS_REPORT.zip'),flush=True)
         print(report['acceptance'],flush=True)
     return report
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--channel',default='msedge');a=p.parse_args();run(a.output,a.channel)
+    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--channel',default='msedge');p.add_argument('--diagnose-first',action='store_true');a=p.parse_args();run(a.output,a.channel,a.diagnose_first)
