@@ -6,7 +6,11 @@ AD = re.compile(r'\b(?:wtb|wts|fs|wanted|want to buy|looking to buy|in search of
 ITEM = re.compile(r'/(?:itm|item|items|listing|listings|product|products)/|/[^/]+/d/[^/]+/\d+\.html$',re.I)
 
 def classify(row):
-    p=urlsplit(row['url']);path=unquote(p.path).lower();title=row.get('title','')
+    p=urlsplit(row['url']);path=unquote(p.path).lower();title=row.get('title','');host=(p.hostname or '').lower()
+    if host in ('wtsinternational.org','www.wtsinternational.org') or host.endswith('.thefreedictionary.com') or host=='thefreedictionary.com':
+        return 'skip','Reference/organization source, not goods classifieds'
+    if re.search(r'/(?:social-media-glossary|glossary)(?:/|$)',path):
+        return 'skip','Glossary, not an ad'
     if re.search(r'/(?:dictionary|thesaurus|definition|definitions|encyclopedia)(?:/|$)',path):
         return 'skip','Reference definition, not an ad or classifieds directory'
     if re.search(r'/(?:profile|profiles|members|users)(?:/|$)',path):
@@ -15,6 +19,8 @@ def classify(row):
         return 'skip','Event/calendar page, not a goods ad'
     if re.fullmatch(r'/(?:pages/)?(?:about(?:-us)?|company|company-history|our-story|contact(?:-us)?|privacy-policy|terms-of-service)/?',path):
         return 'skip','Company information page, not an individual ad'
+    if path.rstrip('/')=='/marketplace' or re.fullmatch(r'/r/[^/]+/?',path):
+        return 'directory','Marketplace/community index; individual posts only'
     if ITEM.search(path):return 'ad','Individual listing route; original evidence still required'
     if path in ('','/') or re.search(r'/marketplace/category/|/(?:categories|search)(?:/|$)',path):
         if AD.search(title+' '+row.get('snippet','')) or re.search(r'\b(?:classifieds|marketplace)\b',title,re.I):

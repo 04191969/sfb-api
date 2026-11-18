@@ -87,28 +87,36 @@ class PublicSearchBrowser(Browser):
             (self.folder/'TRACE.json').write_text(json.dumps(self.trace,indent=2),encoding='utf-8')
 
     def fetch(self, url):
-        self.boundary()
-        self.address(url)
-        self.requests += 1
-        self.dispatched += 1
-        # Redirects/challenges are reported, never followed around a refusal.
+        # Follow ordinary redirects only. Validate/count every destination;
+        # challenges and refusals are never retried through another route.
+        seen=set()
         with httpx.Client(timeout=10, follow_redirects=False) as client:
-            with client.stream('GET', url) as response:
-                if response.status_code != 200:
-                    raise Held('HTTP ' + str(response.status_code))
-                chunks = []
-                size = 0
-                for chunk in response.iter_bytes():
-                    self.boundary()
-                    size += len(chunk)
-                    if size > 5_000_000:
-                        raise Held('Search response size limit')
-                    chunks.append(chunk)
-                text = b''.join(chunks).decode('utf-8', errors='replace')
-                reason = challenge('', text, response.status_code)
-                if reason or 'anomaly.js' in text or 'anomaly-modal' in text:
-                    raise Held(reason or 'Search challenge')
-                return text
+            for hop in range(4):
+                self.boundary();self.address(url)
+                if url in seen:raise Held('Search redirect loop')
+                seen.add(url)
+                self.requests += 1;self.dispatched += 1
+                with client.stream('GET', url) as response:
+                    if response.status_code in (301,302,303,307,308):
+                        location=response.headers.get('location')
+                        if not location:raise Held('Search redirect missing destination')
+                        target=urljoin(url,location)
+                        self.address(target)
+                        if any(word in urlsplit(target).path.lower() for word in ('captcha','challenge','consent','login')):
+                            raise Held('Search redirect requires challenge or consent')
+                        url=target
+                        continue
+                    if response.status_code != 200:raise Held('HTTP '+str(response.status_code))
+                    chunks=[];size=0
+                    for chunk in response.iter_bytes():
+                        self.boundary();size+=len(chunk)
+                        if size>5_000_000:raise Held('Search response size limit')
+                        chunks.append(chunk)
+                    text=b''.join(chunks).decode('utf-8',errors='replace')
+                    reason=challenge('',text,response.status_code)
+                    if reason or 'anomaly.js' in text or 'anomaly-modal' in text:raise Held(reason or 'Search challenge')
+                    return text
+        raise Held('Search redirect limit')
 
     @staticmethod
     def parse_bing(html, query, parent):
@@ -230,6 +238,7 @@ class PublicSearchBrowser(Browser):
 
     def public_engine_search(self, query):
         rows, seen, attempts = [], set(), []
+        if not hasattr(self,'engine_failures'):self.engine_failures={}
         def attempt(engine, base, params, parse):
             self.boundary()
             url = base + '?' + urlencode(params)
@@ -237,6 +246,9 @@ class PublicSearchBrowser(Browser):
             attempts.append(entry)
             self.trace.append(entry)
             try:
+                if urlsplit(url).hostname in self.engine_failures:
+                    entry['cached_failure']=True
+                    raise SiteBlocked('Earlier search failure this run: '+self.engine_failures[urlsplit(url).hostname])
                 if urlsplit(url).hostname in self.held_hosts:
                     raise SiteBlocked('Previously refused engine host')
                 found = parse(self.fetch(url))
@@ -255,6 +267,7 @@ class PublicSearchBrowser(Browser):
                 raise
             except Exception as exc:
                 entry.update(state='held', reason=str(exc)[:300], error_type=type(exc).__name__)
+                if not entry.get('cached_failure'):self.engine_failures[urlsplit(url).hostname]=str(exc)[:200]
                 if any(code in str(exc) for code in ('HTTP 403', 'HTTP 429', 'challenge', 'Challenge')):
                     self.held_hosts.add(urlsplit(url).hostname)
                 return False

@@ -41,13 +41,17 @@ class BroadRunner(BroadDiscoveryMixin,Runner):
         self.calls.append(('ebay',queries))
         yield source_record(page(SURL),'seller')
 class Tests(unittest.TestCase):
-    def run_broad(self,start=0,hold=False):
+    def run_broad(self,start=0,hold=False,seller_fallback=False):
         tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup);root=Path(tmp.name)
         state=DiscoveryState(root/'state'/'broad_discovery.sqlite3')
         for _ in range(start):state.start()
         state.close()
         run=BroadRunner(root/'results'/'run',hold=hold)
-        with patch.dict(os.environ,SFB_COMPONENT_STATE=str(root/'state')):report=run.execute('offline')
+        original_search=PublicBrowser.search
+        def search(browser,query):
+            if seller_fallback and query in [q for side,q in QUERIES if side=='buyer']:return []
+            return original_search(browser,query)
+        with patch.dict(os.environ,SFB_COMPONENT_STATE=str(root/'state')),patch.object(PublicBrowser,'search',search):report=run.execute('offline')
         return run,report,root
     def test_buyer_first_reaches_v2_with_original_sources(self):
         run,r,_=self.run_broad()
@@ -57,8 +61,8 @@ class Tests(unittest.TestCase):
         self.assertEqual(r['pair']['seller']['author_text'],SELLER)
         self.assertTrue(any(c[0]=='ebay' for c in run.calls))
         self.assertEqual(r['discovery_readings'][0]['output']['direction'],'find_sellers')
-    def test_seller_first_finds_public_buyer_and_reaches_same_v2(self):
-        run,r,_=self.run_broad(start=1)
+    def test_seller_fallback_finds_public_buyer_and_reaches_same_v2(self):
+        run,r,_=self.run_broad(start=1,seller_fallback=True)
         self.assertEqual(r['state'],'completed',r.get('reason'))
         self.assertEqual(r['decision'],'Send')
         self.assertEqual([x['output']['direction'] for x in r['discovery_readings']],['find_buyers','find_sellers'])
@@ -145,7 +149,7 @@ class Tests(unittest.TestCase):
         def visit(browser,url,purpose,parent=None):
             visits.append((url,purpose));return original_visit(browser,url,purpose,parent)
         with patch.object(PublicBrowser,'search',search),patch.object(PublicBrowser,'visit',visit):
-            _,r,_=self.run_broad(start=1)
+            _,r,_=self.run_broad(start=1,seller_fallback=True)
         self.assertEqual(r['state'],'completed',r.get('reason'))
         self.assertEqual([u for u,p in visits if p=='buyer'],[BURL])
         self.assertEqual(r['public_page_counts']['buyer'],1)
@@ -171,12 +175,12 @@ class Tests(unittest.TestCase):
         def visit(browser,url,purpose,parent=None):
             return page(SURL) if url==alias else original_visit(browser,url,purpose,parent)
         with patch.object(PublicBrowser,'search',search),patch.object(PublicBrowser,'visit',visit):
-            _,r,_=self.run_broad(start=1)
+            _,r,_=self.run_broad(start=1,seller_fallback=True)
         self.assertEqual(r['state'],'completed',r.get('reason'))
         self.assertEqual(r['pair']['buyer']['url'],BURL)
         self.assertTrue(any(e['event']=='Redirect to originating source skipped' for e in r['events']))
     def test_current_reader_receives_full_original_and_correct_direction(self):
-        _,r,_=self.run_broad(start=1)
+        _,r,_=self.run_broad(start=1,seller_fallback=True)
         for entry in r['discovery_readings']:
             self.assertEqual(entry['source']['text_sha256'],entry['output']['source']['text_sha256'])
             self.assertEqual(entry['source']['author_text'],entry['output']['quotations'][0]['text'])

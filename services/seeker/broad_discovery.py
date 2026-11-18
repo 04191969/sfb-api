@@ -3,7 +3,8 @@ import json, os, re, sqlite3, time
 from pathlib import Path
 from urllib.parse import urlsplit
 from automatic_run import (now, sha, tokens, excluded,
-    Held, RunLimitReached, SearchExtractionError, discovery_body, validate_output, plan)
+    Held, RunLimitReached, SearchExtractionError, validate_output)
+from continuation import discovery_body, plan
 from browser_driver import public_url
 from lead_navigation import classify, classify_buyer, ITEM
 
@@ -14,6 +15,15 @@ QUERIES = (
  ('buyer', '"wanted" marketplace'), ('seller', '"FS" classifieds'),
  ('buyer', '"in search of" classifieds'), ('seller', '"for sale" forum'),
 )
+def prioritized_queries(start):
+    """Rotate wording within each side; exhaust buyer seeds before seller seeds."""
+    result=[]
+    for side in ('buyer','seller'):
+        group=[entry for entry in QUERIES if entry[0]==side]
+        offset=start % len(group)
+        result.extend(group[offset:]+group[:offset])
+    return result
+
 BUY = re.compile(r'\b(?:wtb|wanted|want to buy|looking to buy|looking for|in search of|seeking)\b', re.I)
 SELL = re.compile(r'\b(?:wts|fs|for sale|selling|asking)\b', re.I)
 
@@ -40,7 +50,8 @@ class DiscoveryState:
 def source_record(page,side):
     """Keep source-boundary checks; remove only the four-category buyer allowlist."""
     text=page.get('source_text','');title=page.get('title','');extraction=page.get('extraction','')
-    if not 80<=len(text)<=20000:raise ValueError('Source size outside capture bounds')
+    minimum=1 if extraction.startswith('first_original_post:') else 80
+    if not minimum<=len(text.strip())<=20000:raise ValueError(f'Source size outside capture bounds: chars={len(text)}, extraction={extraction}, allowed={minimum}..20000')
     if not extraction or extraction=='ambiguous_multiple_articles':raise ValueError('Original author region unresolved')
     if not tokens(title):raise ValueError('Missing product title')
     if excluded(title+'\n'+text):raise ValueError('Excluded source')
@@ -160,11 +171,10 @@ class BroadDiscoveryMixin:
         start=self.discovery_state.start()
         self.r.update(public_page_counts={'buyer':0,'seller':0},directory_page_visits=0,query_rotation_start=start,
             test_categories=[],scope='Broad WTB and WTS across categories; existing excluded-source rules retained.',
-            discovery_queries=[dict(side=s,query=q) for s,q in QUERIES],discovery_coverage_limited=False)
+            discovery_queries=[dict(side=s,query=q) for s,q in prioritized_queries(start)],discovery_coverage_limited=False)
         attempted=set();failures=[]
         try:
-            for offset in range(len(QUERIES)):
-                side,query=QUERIES[(start+offset)%len(QUERIES)]
+            for side,query in prioritized_queries(start):
                 try:
                     for source in self.public_sources(query,side,root=True):
                         reading=self.read_source(source,key)
