@@ -3493,8 +3493,8 @@ def check_manual_requests(sb, openai_client, seen):
                 incomplete,
             )
         else:
-            import five_step_host
-            five_step_host.run_claimed(sb, write_heartbeat, run)
+            import native_discovery
+            native_discovery.run_claimed(sb, openai_client, seen, run)
             return True
         sb.table("seeker_runs").update({
             "status": "completed",

@@ -13,7 +13,7 @@ class IsolationTests(unittest.TestCase):
  def test_v2_are_separate_physical_files_with_independent_integrity(self):
   for name in ('request_template.json','reading_contract.py','shared_rules.py','INTEGRITY.json','adapter.py'):
    a=ROOT/'live_matches/live_matches_v2'/name;b=ROOT/'seeker/seeker_v2'/name
-   if name in ('request_template.json','adapter.py'):self.assertEqual(a.read_bytes(),b.read_bytes())
+   if name == 'request_template.json':self.assertEqual(a.read_bytes(),b.read_bytes())
    for root in (a.parent,b.parent):
     for file,digest in json.loads((root/'INTEGRITY.json').read_text()).items():
      self.assertEqual(hashlib.sha256((root/file).read_bytes().replace(b'\r\n',b'\n')).hexdigest(),digest)

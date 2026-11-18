@@ -108,7 +108,7 @@ def install(scope):
             found = [r for r in rows if scope['market_label'](r.get('make'), r.get('model'), r.get('name'))[2] == key]
             if found:
                 identity.update(make=found[0].get('make') or '', model=found[0].get('model') or item)
-        return dict(identity, match=accepted, confidence=100 if accepted else 0, reason=reason)
+        return dict(identity, match=accepted, confidence=100 if accepted else 0, reason=reason, reading=reading, qualification=qualification)
 
     scope['search_listings'] = search
     scope['ai_evaluate_match'] = evaluate
