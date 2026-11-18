@@ -10,8 +10,17 @@ def payload(pair, unused=None):
     return dict(template(), input=json.dumps(pair, ensure_ascii=False))
 
 
+class InvalidMatcherReading(ValueError):
+    """A received reading failed evidence/schema validation; never qualifies."""
+    def __init__(self,reason,reading):
+        super().__init__(reason)
+        self.reading=reading
+
 def wrap(reading, pair):
-    validate(reading, pair, shape)
+    try:
+        validate(reading, pair, shape)
+    except (ValueError,TypeError,KeyError) as exc:
+        raise InvalidMatcherReading(str(exc),reading) from exc
     qualification = qualify(reading)
     return {'reading': reading, 'qualification': qualification,
             'decision': qualification['decision']}

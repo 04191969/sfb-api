@@ -335,8 +335,17 @@ class ContinuationMixin:
                     body = encode(locked.payload(facts,'B'))
                     res = self.ledger.reserve(plan(body,'matcher'),'matcher',True)
                     self.r['steps']['matcher'] = 'running'
-                    answer = self.model('matcher',body,key,res)
-                    valid = locked.validate_answer(answer,facts)
+                    try:
+                        answer = self.model('matcher',body,key,res)
+                        valid = locked.validate_answer(answer,facts)
+                    except locked.InvalidMatcherReading as exc:
+                        self.r.setdefault('invalid_matcher_readings',[]).append(
+                            dict(pair=pair,reading=exc.reading,reason=str(exc),reservation=res))
+                        self.r['steps']['matcher']='held'
+                        self.event('Invalid matcher reading held; continuing candidates',
+                            buyer_url=buyer['url'],seller_url=seller['url'],reason=str(exc))
+                        self.persist()
+                        continue
                     self.r['steps']['matcher'] = 'completed'
                     assessment = dict(pair=pair,matcher_answer=answer,validated=valid)
                     self.r['assessments'].append(assessment)
@@ -355,6 +364,10 @@ class ContinuationMixin:
                         disclosure='Non-Send assessment saved; continuing remaining candidates and queries.')
                     self.event('Assessment withheld; continuing seller queue',
                         buyer_url=buyer['url'],seller_url=seller['url'],decision=answer['decision'],reason=valid['Reason'])
+                if self.r.get('invalid_matcher_readings'):
+                    self.r.update(state='assessment_incomplete',pipeline_completed=False,
+                        reason=f'{len(self.r["invalid_matcher_readings"])} invalid matcher reading(s) held; no validated Send before queues exhausted. See saved evidence.')
+                    return self.r
                 self.r.update(state='no_qualifying_match',pipeline_completed=True,
                     reason=f'No V2 Send in {len(self.r["assessments"])} assessments across {self.r["buyers_evaluated"]} buyers; checked queues exhausted. This does not establish no sellers exist.')
                 return self.r

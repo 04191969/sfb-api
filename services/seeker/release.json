@@ -1,11 +1,11 @@
 {
   "component": "seeker",
-  "release_id": "split-bea3977-seeker-12",
+  "release_id": "split-bea3977-seeker-13",
   "baseline": "bea39775a007c5153dcedd5a241f1470a119c078",
   "v2_version": "7dc98a6e9b8e289d9ca4e0adbd4d9242898d0815e0dfaa6afe005ebb4649077c",
   "files": {
     "SFB_Seeker_v2_env.bat": "3f5c8d18678e502146d41ac20c4e08dfabcc47da5e9b6e38dc8199c15d7642ef",
-    "continuation.py": "60c76a947454975b0899e79f3b50e30e1cbb866d260fcbdaa07beb3c480a33ca",
+    "continuation.py": "89fcb3a62ec6df09415e12d93e2689b49cbc107ecc66ccf1e35e3a64b5438067",
     "five_step_host.py": "49155d3a0a5df85f31709cc783369115e5881089a99bcfc38e0de43f1663c017",
     "five_step_runtime.py": "3482bf1d687bbe7698c8be177623405cc95e94d6751140ff813b704d2e11f651",
     "candidate_navigation.py": "36a1ff6241196f0dfbf04cc173d2e0d726d4799553dfdecba69af7316add662f",
@@ -16,7 +16,7 @@
     "runtime_support.py": "50151805b0e62e3291141432845e3807337f17ff8e6d4ac1b98423f02ad4ccac",
     "broad_discovery.py": "c75b43ca1a51f2da490e923642243927d7632249a9f7f71a9c47974ab6fcc8f1",
     "seeker_connector.py": "81ea6607a3e3c05dc8ca584944eb9699093f6ccb0f56ea9794bc681e3656f4c5",
-    "v2_bridge.py": "3d2ff26f59bcaf69533f61a43cf7d1cfae36e980d5516970792c5f0588003b44",
+    "v2_bridge.py": "00695aa77cd59b077746550dcfaa593ecfc843f1eb7660f3bb415ef6ad6c5bc8",
     "lead_navigation.py": "fdc71ce98963ba43efe6725941cda4b3918eae2fd94b4ab91134d455d30d7159",
     "README.md": "f0ebe9ad0ec62200a977b336710599b6eb6df5b90cb745f9e4383bae9f9ba58b",
     "runtime.py": "a21cf978f0a257e1a91ad7aee575c87a80188e3b0b7b6b41e230cdb75b15d858",
