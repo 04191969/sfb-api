@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 from automatic_run import (now, sha, tokens, excluded,
     Held, RunLimitReached, SearchExtractionError, discovery_body, validate_output, plan)
 from browser_driver import public_url
+from lead_navigation import classify, ITEM
 
 QUERIES = (
  ('buyer', '"want to buy" classifieds'), ('seller', '"for sale" classifieds'),
@@ -75,6 +76,9 @@ class BroadDiscoveryMixin:
             row,depth=queue.pop(0);url=self.buyer_screen.canonical_url(row['url'])
             if url in seen:continue
             seen.add(url)
+            kind,reason=classify(row)
+            if kind=='skip':
+                self.event('Non-ad lead skipped',url=url,reason=reason);continue
             path=urlsplit(url).path.lower()
             if re.search(r'/(?:profile|profiles|members|users)(?:/|$)',path):
                 self.event('Profile skipped',url=url);continue
@@ -93,19 +97,28 @@ class BroadDiscoveryMixin:
                 # SellerApiBrowser routes purpose=seller to eBay; use the wrapped
                 # public browser explicitly for public WTS originals.
                 public=getattr(self.browser,'original',self.browser)
-                page=public.visit(url,side,row.get('parent'))
-                source=source_record(page,side)
+                if kind=='directory':
+                    page=public.visit_directory(url,row.get('parent'))
+                    self.event('Directory inspected for ad links only',url=url)
+                    source=None
+                else:
+                    page=public.visit(url,side,row.get('parent'))
+                    source=source_record(page,side)
             except RunLimitReached:raise
             except (Held,ValueError) as exc:
                 self.event('Public source skipped',side=side,url=url,reason=str(exc))
                 if root:self.discovery_state.mark(side,url,outcome='unreadable')
             else:
-                if root:self.discovery_state.mark(side,url,source['text_sha256'])
-                yield source
+                if source is not None:
+                    if root:self.discovery_state.mark(side,url,source['text_sha256'])
+                    yield source
             if page is not None and depth==0:
                 anchor=BUY if side=='buyer' else SELL
                 children=[(dict(link,parent=page['url']),1) for link in page.get('links',[])
-                    if urlsplit(link['url']).hostname==urlsplit(page['url']).hostname and anchor.search(link.get('title',''))]
+                    if urlsplit(link['url']).hostname==urlsplit(page['url']).hostname and (anchor.search(link.get('title','')) or (side=='seller' and ITEM.search(urlsplit(link['url']).path)))]
+                if kind=='directory' and not children:
+                    self.r['discovery_coverage_limited']=True
+                    self.event('Directory yielded no readable individual ad links',url=url)
                 queue=children+queue
 
     def read_source(self,source,key):

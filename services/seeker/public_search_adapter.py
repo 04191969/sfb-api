@@ -1,4 +1,4 @@
-"""Public multi-engine retrieval; listing capture remains the pinned Browser.visit.
+"""Public multi-engine retrieval; pinned listing capture followed by page cleanup.
 
 Adapted from the supplied v3 engine roster. No paid API, credentials, or
 query rewriting. Each HTTP dispatch consumes the existing request allowance.
@@ -6,7 +6,7 @@ query rewriting. Each HTTP dispatch consumes the existing request allowance.
 import json
 import hashlib
 import random
-from urllib.parse import urlencode, urlsplit, parse_qs
+from urllib.parse import urlencode, urlsplit, parse_qs, urljoin
 
 import httpx
 from bs4 import BeautifulSoup
@@ -20,6 +20,66 @@ INSTANCES = ('https://search.bus-hit.me', 'https://searx.tiekoetter.com',
 
 
 class PublicSearchBrowser(Browser):
+    def visit(self, url, purpose, parent=None):
+        try:
+            return super().visit(url, purpose, parent)
+        finally:
+            # Captures are already saved. Unload the content document so scripts
+            # cannot consume the run budget during subsequent search/model work.
+            try:
+                self.page.goto('about:blank', wait_until='commit', timeout=5000)
+            except Exception as exc:
+                raise RunLimitReached('Could not stop captured page background activity') from exc
+
+    def visit_directory(self, url, parent=None):
+        self.boundary()
+        if self.pages >= 32:
+            raise RunLimitReached('32-page navigation limit reached')
+        self.address(url)
+        self.pages += 1
+        row = dict(sequence=self.pages, url=url, purpose='directory', parent=parent,
+                   retrieval='document_only_navigation', state='attempted')
+        self.trace.append(row)
+        context = None
+        try:
+            context = self.browser.new_context(java_script_enabled=False,
+                accept_downloads=False, service_workers='block')
+            context.route('**/*', self.search_guard)
+            page = context.new_page()
+            response = page.goto(url, wait_until='domcontentloaded', timeout=25000)
+            self.boundary()
+            if not response: raise Held('No directory response')
+            self.address(page.url)
+            html = page.content()
+            if len(html.encode('utf-8')) > 5_000_000: raise Held('Directory size limit')
+            soup = BeautifulSoup(html, 'html.parser')
+            title = page.title()
+            reason = challenge(title, soup.get_text(' ', strip=True), response.status)
+            if reason:
+                self.held_hosts.add(urlsplit(page.url).hostname)
+                raise Held(reason)
+            if response.status != 200: raise Held('HTTP '+str(response.status))
+            links = []
+            for anchor in soup.select('a[href]'):
+                target = urljoin(page.url, anchor.get('href', ''))
+                if urlsplit(target).scheme in ('http','https'):
+                    links.append(dict(url=target,title=anchor.get_text(' ',strip=True)))
+            result = dict(url=page.url,title=title,links=links,
+                capture_id='directory-'+str(self.pages),source_text='',
+                extraction='navigation_only',single_listing=False)
+            stem=self.folder/f'{self.pages:03d}'
+            stem.with_suffix('.html').write_text(html,encoding='utf-8')
+            stem.with_suffix('.json').write_text(json.dumps(result),encoding='utf-8')
+            row.update(state='captured',final_url=page.url,link_count=len(links))
+            return result
+        except Exception as exc:
+            row.update(state='held',reason=str(exc)[:300],error_type=type(exc).__name__)
+            raise
+        finally:
+            if context is not None: context.close()
+            row['request_counts']=self.counters()
+            (self.folder/'TRACE.json').write_text(json.dumps(self.trace,indent=2),encoding='utf-8')
+
     def fetch(self, url):
         self.boundary()
         self.address(url)
