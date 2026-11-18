@@ -6,7 +6,8 @@ V2 payloads, judgments, query wording, API transport and retrieval caps stay int
 from automatic_run import (BROAD, record, now, sha, save, tokens, excluded, WANTED,
     urlsplit, seller_identity, item_id, ebay_directory, PER_DIRECTORY_VISITS,
     SELECTION_DONE, Held, RunLimitReached, SiteBlocked, SearchExtractionError,
-    discovery_body, validate_output, encode, need, plan, money, P, real_transport)
+    discovery_body as pinned_discovery_body, validate_output, encode, need,
+    plan as pinned_plan, money, P, real_transport)
 from spending import Ledger
 from mercedes_route import Route
 import json, re, zipfile
@@ -14,6 +15,23 @@ from discovery_contract import response_object
 from discovery_contract import locked as original_locked
 parse_response = original_locked.parse
 import v2_bridge as locked
+
+from protected_ledger import estimate
+
+DISCOVERY_OUTPUT_TOKENS = 6000
+
+def discovery_body(packet):
+    request = json.loads(pinned_discovery_body(packet))
+    request["max_output_tokens"] = DISCOVERY_OUTPUT_TOKENS
+    return encode(request)
+
+def plan(body, kind):
+    result = pinned_plan(body, kind)
+    if kind == "discovery":
+        need(json.loads(body).get("max_output_tokens") == DISCOVERY_OUTPUT_TOKENS, "Discovery output allowance mismatch")
+        result.update(max_output_tokens=DISCOVERY_OUTPUT_TOKENS,
+                      maximum=estimate(len(body), DISCOVERY_OUTPUT_TOKENS))
+    return result
 
 MODEL_REQUEST_LIMIT = 17  # at most eight readers plus nine seller assessments
 
@@ -48,7 +66,7 @@ class ContinuationRoute(Route):
         except Exception as e:
             self.ledger.update(reservation,'charge_unknown',reason=str(e));raise
         charge=money((__import__('decimal').Decimal(usage['input_tokens'])*__import__('decimal').Decimal('2.50')+__import__('decimal').Decimal(usage['output_tokens'])*15)/1000000)
-        self.ledger.settle(reservation,charge,'estimated from reported usage; not a provider invoice',usage,violation='output exceeds frozen cap' if usage['output_tokens']>(3000 if kind=='discovery' else 6000) else None)
+        self.ledger.settle(reservation,charge,'estimated from reported usage; not a provider invoice',usage,violation='output exceeds frozen cap' if usage['output_tokens']>(DISCOVERY_OUTPUT_TOKENS if kind=='discovery' else 6000) else None)
         self.report['stage']=kind+' output validation'
         return response_object(raw)
 
