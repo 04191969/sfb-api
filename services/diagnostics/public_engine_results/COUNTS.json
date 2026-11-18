@@ -1,0 +1,350 @@
+{
+  "date": "2026-11-18",
+  "attempts": 205,
+  "routes": 41,
+  "queries": [
+    "\"want to buy\" classifieds",
+    "\"WTB\" forum",
+    "\"looking to buy\" forum",
+    "\"wanted\" marketplace",
+    "\"in search of\" classifieds"
+  ],
+  "environment": "Linux diagnostic host, not user Windows PC; existing environment network proxy; direct HTML requests; no JS browser rendering; no explicit US locale; some engines defaulted to UK results",
+  "summary": [
+    {
+      "route": "Google",
+      "attempts": 5,
+      "responses": {
+        "429": 5
+      },
+      "finding": "HTTP 429; unusual-traffic challenge. No usable result list."
+    },
+    {
+      "route": "Bing",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Real result lists in all five saved HTML pages. Result URLs use Bing redirect encoding; a generic external-link parser misses them."
+    },
+    {
+      "route": "Yahoo",
+      "attempts": 5,
+      "responses": {
+        "500": 5
+      },
+      "finding": "Direct route returned HTTP 500 with empty bodies in all five attempts. Earlier DDGS route had partial success; this does not prove Yahoo universally unavailable."
+    },
+    {
+      "route": "DuckDuckGo HTML",
+      "attempts": 5,
+      "responses": {
+        "202": 5
+      },
+      "finding": "HTTP 202 human-verification challenge, all five."
+    },
+    {
+      "route": "DuckDuckGo Lite",
+      "attempts": 5,
+      "responses": {
+        "202": 5
+      },
+      "finding": "HTTP 202 human-verification challenge, all five."
+    },
+    {
+      "route": "Brave",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Real result lists in all five saved HTML pages. Some use /go/v1/ redirect links, others direct URLs. Earlier DDGS 429 result did not recur with this direct route."
+    },
+    {
+      "route": "Mojeek",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTTP 200 CAPTCHA page, not results."
+    },
+    {
+      "route": "Startpage",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTTP 200 Anubis verification page, not results."
+    },
+    {
+      "route": "Qwant",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Query/title present, but no readable result list in returned HTML; client-rendered route unproven."
+    },
+    {
+      "route": "Ecosia",
+      "attempts": 5,
+      "responses": {
+        "403": 5
+      },
+      "finding": "HTTP 403 firewall challenge."
+    },
+    {
+      "route": "Yep",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTTP 200 shell without readable results; browser-rendered retrieval unproven."
+    },
+    {
+      "route": "Swisscows",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Query/title present but no readable results in HTML; browser-rendered retrieval unproven."
+    },
+    {
+      "route": "MetaGer",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Redirected to access-key/payment setup. Not available as anonymous free search in this test."
+    },
+    {
+      "route": "Marginalia",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Wait/bot-interstitial page; no result list evaluated. Did not bypass it."
+    },
+    {
+      "route": "Mwmbl",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Real results on two queries, explicit no-results on three; observed results mostly unrelated to buying ads. Seed Search requires login; not used."
+    },
+    {
+      "route": "Stract",
+      "attempts": 5,
+      "responses": {
+        "404": 5
+      },
+      "finding": "Tested /search route returned 404; no usable search demonstrated. Do not infer full service status from this route alone."
+    },
+    {
+      "route": "Yandex",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTTP 200 robot-verification page."
+    },
+    {
+      "route": "Baidu",
+      "attempts": 5,
+      "responses": {
+        "200": 2,
+        "503": 3
+      },
+      "finding": "Empty/unusable responses: two HTTP 200, three 503."
+    },
+    {
+      "route": "Naver",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Real search results, including wanted-classified sources on first query; other queries include unrelated material. Korean interface, English queries."
+    },
+    {
+      "route": "Seznam",
+      "attempts": 5,
+      "responses": {
+        "200": 3,
+        "429": 2
+      },
+      "finding": "Real result pages on three queries, HTTP 429 on two. Classified sources present, relevance mixed."
+    },
+    {
+      "route": "AOL",
+      "attempts": 5,
+      "responses": {
+        "404": 5
+      },
+      "finding": "Tested public route returned 404 in all five; search not demonstrated."
+    },
+    {
+      "route": "Ask",
+      "attempts": 5,
+      "responses": {
+        "404": 5
+      },
+      "finding": "Tested public route returned 404 in all five; search not demonstrated."
+    },
+    {
+      "route": "Lycos",
+      "attempts": 5,
+      "responses": {
+        "503": 5
+      },
+      "finding": "HTTP 503 in all five."
+    },
+    {
+      "route": "Dogpile",
+      "attempts": 5,
+      "responses": {
+        "request_error": 1,
+        "200": 4
+      },
+      "finding": "One request error; four HTML shells saying loading search results. Browser-rendered results not tested."
+    },
+    {
+      "route": "Gibiru",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTTP 200 Site Unavailable response, no results."
+    },
+    {
+      "route": "SearXNG sapti",
+      "attempts": 5,
+      "responses": {
+        "429": 5
+      },
+      "finding": "HTTP 429 in all five."
+    },
+    {
+      "route": "SearXNG tiekoetter",
+      "attempts": 5,
+      "responses": {
+        "429": 5
+      },
+      "finding": "HTTP 429 in all five."
+    },
+    {
+      "route": "SearXNG paulgo",
+      "attempts": 5,
+      "responses": {
+        "429": 5
+      },
+      "finding": "HTTP 429 in all five."
+    },
+    {
+      "route": "Wiby",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Explicit no-results pages on all five broad queries."
+    },
+    {
+      "route": "SearchMySite",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Real results on four queries, no results on one. Sampled results personal blogs rather than buyer ads."
+    },
+    {
+      "route": "Lilo",
+      "attempts": 5,
+      "responses": {
+        "200": 1,
+        "request_error": 4
+      },
+      "finding": "One empty HTML shell and four request errors. No usable list."
+    },
+    {
+      "route": "Good",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Explicit no-results pages on all five queries."
+    },
+    {
+      "route": "OceanHero",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTML shell/navigation only; no readable result list."
+    },
+    {
+      "route": "You",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTML shell/sign-in interface; no readable result list."
+    },
+    {
+      "route": "Presearch",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Site Unavailable response, no results."
+    },
+    {
+      "route": "Boardreader",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Tested route returned page-not-found text with HTTP 200. Route unresolved, not a valid no-results finding."
+    },
+    {
+      "route": "360 Search",
+      "attempts": 5,
+      "responses": {
+        "302": 5
+      },
+      "finding": "HTTP 302 redirect-loop errors; no result page."
+    },
+    {
+      "route": "Sogou",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Search content returned, but observed English-query interpretation/relevance poor (translation/definitions and unrelated content); not proven for buyer discovery."
+    },
+    {
+      "route": "Daum",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "Real search results, but largely unrelated; WTB query includes virtual-game trading. Not demonstrated useful for physical-product buyer discovery."
+    },
+    {
+      "route": "Petal",
+      "attempts": 5,
+      "responses": {
+        "503": 5
+      },
+      "finding": "HTTP 503 in all five."
+    },
+    {
+      "route": "Luxxle",
+      "attempts": 5,
+      "responses": {
+        "200": 5
+      },
+      "finding": "HTTP 200 with 404/error-page text; no usable list."
+    }
+  ],
+  "no_production_changes": true,
+  "paid_model_calls": 0,
+  "database_writes": 0
+}
