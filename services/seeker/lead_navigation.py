@@ -22,3 +22,28 @@ def classify(row):
         return ('directory','Forum navigation only') if AD.search(title+' '+row.get('snippet','')) else ('skip','Forum without ad context')
     if AD.search(title+' '+row.get('snippet','')):return 'ad','Ad wording; reader must establish author intent'
     return 'ad','Unclassified lead; original page and reader must establish intent'
+
+BUYER_AD = re.compile(r'\b(?:wtb|wanted|want(?:ed)? to buy|looking to buy|looking for|in search of|seeking|needed)\b',re.I)
+
+def classify_buyer(row):
+    """Use the lead's own evidence, never the search query, to admit a buyer."""
+    kind,reason=classify(row)
+    if kind=='skip':return kind,reason
+    p=urlsplit(row['url']);host=(p.hostname or '').lower();path=unquote(p.path).lower()
+    if host=='facebook.com' or host.endswith('.facebook.com'):
+        if re.match(r'^/groups/[^/]+/?$',path):
+            return 'directory','Facebook group index; individual posts only'
+        if path.startswith(('/marketplace','/login')):
+            return 'skip','Marketplace offer or login page, not a buyer post'
+    ebay=bool(re.search(r'(^|\.)ebay\.[a-z.]+$',host))
+    if ebay and re.match(r'^/(?:itm|sch|shop)(?:/|$)',path):
+        return 'skip','eBay shopping result, not a buyer request'
+    if re.search(r'/(?:products?|shopping|fit-finder)(?:/|$)',path):
+        return 'skip','Product or shopping guide route, not a buyer request'
+    if host in ('reverb.com','www.reverb.com') and re.match(r'^/(?:[a-z]{2}(?:-[a-z]{2})?/)?(?:item|p)/',path):
+        return 'skip','Seller listing/catalog, not a buyer request'
+    if kind=='directory':return kind,reason
+    evidence=row.get('title','')+' '+row.get('snippet','')
+    if not BUYER_AD.search(evidence):
+        return 'skip','No buying-request evidence in result title or snippet'
+    return 'ad','Possible buying request; original author intent still requires reader validation'

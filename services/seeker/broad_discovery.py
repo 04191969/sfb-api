@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 from automatic_run import (now, sha, tokens, excluded,
     Held, RunLimitReached, SearchExtractionError, discovery_body, validate_output, plan)
 from browser_driver import public_url
-from lead_navigation import classify, ITEM
+from lead_navigation import classify, classify_buyer, ITEM
 
 QUERIES = (
  ('buyer', '"want to buy" classifieds'), ('seller', '"for sale" classifieds'),
@@ -46,6 +46,9 @@ def source_record(page,side):
     if excluded(title+'\n'+text):raise ValueError('Excluded source')
     if re.search(r'\b(?:classifieds|search results|latest ads|all listings)\b',title,re.I):raise ValueError('Directory/search heading')
     if re.search(r'/(?:forum|forums|categories)/',urlsplit(page['url']).path) and not extraction.startswith('first_original_post:'):raise ValueError('Forum directory without original post')
+    parsed=urlsplit(page['url'])
+    if side=='buyer' and (parsed.hostname or '').removeprefix('www.')=='facebook.com' and re.match(r'^/groups/[^/]+/?$',parsed.path):
+        raise ValueError('Facebook group index, not an individual buyer post')
     if side=='buyer' and extraction in ('main_region','single_article'):
         requests=[link for link in page.get('links',[]) if BUY.search(link.get('title','')) and link['url']!=page['url']]
         if len(requests)>4:raise ValueError('Wanted directory, not an individual ad')
@@ -79,7 +82,7 @@ class BroadDiscoveryMixin:
                 self.event("Originating source skipped",url=url,side=side);continue
             if url in seen:continue
             seen.add(url)
-            kind,reason=classify(row)
+            kind,reason=(classify_buyer(row) if side=='buyer' else classify(row))
             if kind=='skip':
                 self.event('Non-ad lead skipped',url=url,reason=reason);continue
             path=urlsplit(url).path.lower()
