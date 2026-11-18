@@ -8,6 +8,7 @@ import automatic_run
 from lead_navigation import classify
 from public_search_adapter import PublicSearchBrowser
 from browser_driver import Browser,Held,RunLimitReached
+from playwright.sync_api import Error as BrowserError
 class Tests(unittest.TestCase):
     def browser(self):
         tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup)
@@ -49,6 +50,21 @@ class Tests(unittest.TestCase):
         c=b.browser.new_context.return_value;c.new_page.return_value.goto.side_effect=Held('blocked')
         with self.assertRaises(Held):b.visit_directory('https://example.com')
         c.close.assert_called_once()
+    def test_browser_refusal_is_recoverable_source_failure(self):
+        b=self.browser();b.browser=MagicMock();b.address=MagicMock()
+        c=b.browser.new_context.return_value
+        c.new_page.return_value.goto.side_effect=BrowserError('Page.goto: net::ERR_BLOCKED_BY_CLIENT')
+        with self.assertRaisesRegex(Held,'ERR_BLOCKED_BY_CLIENT'):
+            b.visit_directory('http://www.bimmerboard.com/forums/forsale')
+        c.close.assert_called_once()
+        self.assertEqual(b.trace[-1]['error_type'],'Error')
+    def test_browser_error_does_not_swallow_global_limit(self):
+        b=self.browser();b.browser=MagicMock();b.address=MagicMock()
+        def fail(*a,**k):
+            b.limit_reason='1,200 dispatched browser request limit reached'
+            raise BrowserError('net::ERR_BLOCKED_BY_CLIENT')
+        b.browser.new_context.return_value.new_page.return_value.goto.side_effect=fail
+        with self.assertRaises(RunLimitReached):b.visit_directory('https://example.com')
     def test_navigation_subresources_blocked_without_spending(self):
         b=self.browser();route=MagicMock();route.request.resource_type='script'
         b.search_guard(route)

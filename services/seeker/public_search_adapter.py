@@ -10,6 +10,7 @@ from urllib.parse import urlencode, urlsplit, parse_qs, urljoin
 
 import httpx
 from bs4 import BeautifulSoup
+from playwright.sync_api import Error as BrowserError
 from browser_driver import Browser, Held, RunLimitReached, SearchExtractionError, SiteBlocked, challenge, destination
 
 INSTANCES = ('https://search.bus-hit.me', 'https://searx.tiekoetter.com',
@@ -74,6 +75,11 @@ class PublicSearchBrowser(Browser):
             return result
         except Exception as exc:
             row.update(state='held',reason=str(exc)[:300],error_type=type(exc).__name__)
+            if isinstance(exc, BrowserError):
+                # A browser refusal is a source failure, not a broken run.
+                # Preserve global limit/cancellation outcomes before normalizing.
+                self.boundary()
+                raise Held('Directory navigation failed: '+str(exc)[:300]) from exc
             raise
         finally:
             if context is not None: context.close()

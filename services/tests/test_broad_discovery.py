@@ -124,6 +124,16 @@ class Tests(unittest.TestCase):
             _,r,_=self.run_broad()
         self.assertEqual(r['state'],'completed',r.get('reason'))
         self.assertEqual(r['discovery_readings'][0]['source']['url'],BURL)
+    def test_failed_directory_continues_to_next_real_ad(self):
+        from browser_driver import Held
+        original=PublicBrowser.search
+        def search(browser,query):
+            if query==QUERIES[0][1]:return [dict(url='http://www.bimmerboard.com/forums/forsale',title='For Sale Forum'),dict(url=BURL,title='WTB Example Q2 guitar')]
+            return original(browser,query)
+        with patch.object(PublicBrowser,'search',search),patch.object(PublicBrowser,'visit_directory',side_effect=Held('Directory navigation failed: net::ERR_BLOCKED_BY_CLIENT'),create=True):
+            _,r,_=self.run_broad()
+        self.assertEqual(r['state'],'completed',r.get('reason'))
+        self.assertEqual(r['pair']['buyer']['url'],BURL)
     def test_current_reader_receives_full_original_and_correct_direction(self):
         _,r,_=self.run_broad(start=1)
         for entry in r['discovery_readings']:
