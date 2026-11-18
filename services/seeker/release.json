@@ -1,6 +1,6 @@
 {
   "component": "seeker",
-  "release_id": "split-bea3977-seeker-native-2",
+  "release_id": "split-bea3977-seeker-native-3",
   "baseline": "bea39775a007c5153dcedd5a241f1470a119c078",
   "v2_version": "7dc98a6e9b8e289d9ca4e0adbd4d9242898d0815e0dfaa6afe005ebb4649077c",
   "files": {
@@ -21,7 +21,7 @@
     "runtime.py": "a21cf978f0a257e1a91ad7aee575c87a80188e3b0b7b6b41e230cdb75b15d858",
     "railway_ebay_transport.py": "a41123696afe6796ee5f671aeb5651340e278ee7148152a32c4b454269e76d78",
     "five_step_package_hashes.json": "5ac6a36c4bc0a38c96ad689024d9758844c237fed377a505b2701357b0a8337d",
-    "native_discovery.py": "a6083e4755395daa588ecbfad6b6ccdddb4b495b28745c7b3a55acf22b3f0684",
+    "native_discovery.py": "0bd98929aa2db8ba7957101a634fd8d38900db9d7f705b89be63c9642d6a750f",
     "owner_api_bridge.py": "57094ed8834ca7cadb86bb40abaa8c24d1e049f14d3dfa2be35e3db220bc42c2",
     "reader_discovery.py": "742139187b533ed922f383f2e2f065e30520098680d3ef6c23e579fef266967a",
     "native_reader.py": "99061da03f8b91778b6f84cdc847ecc80f9c79f1403871a647769424860ca0fe",

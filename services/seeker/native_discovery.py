@@ -97,6 +97,20 @@ def cycle(scope,client,seen,report,persist,publish,queries):
             persist()
     report['state']='incomplete' if report['incomplete'] else 'no_qualifying_match'
 
+def public_search(scope,query,max_results,report,persist):
+    """A failed query is incomplete coverage, not grounds to discard other leads."""
+    record=dict(query=query,results=[],state='running')
+    report.setdefault('all_queries',[]).append(record);persist()
+    try:
+        record['results']=list(scope['DDGS'](timeout=15).text(query,max_results=max_results))
+    except Exception as exc:
+        record.update(state='failed',error=type(exc).__name__+': '+str(exc))
+        report['incomplete'].append('Public search failed: '+query)
+        print('    Search failed; continuing other queries: '+record['error'],flush=True)
+    else:record['state']='completed'
+    persist()
+    return record['results']
+
 def run_claimed(sb,client,seen,run):
     if (run.get('search_query') or '').strip() or run.get('market_id') or run.get('job_kind') not in (None,'consumer_search','public_discovery'):
         raise ValueError('Native broad Seeker accepts only its own blank discovery job')
@@ -110,9 +124,7 @@ def run_claimed(sb,client,seen,run):
     try:
         scope=load(state)
         def search(query,max_results=10):
-            # Keep failures distinct from genuine empty results, with no retry.
-            rows=list(scope['DDGS'](timeout=15).text(query,max_results=max_results))
-            report.setdefault('all_queries',[]).append(dict(query=query,results=rows));persist();return rows
+            return public_search(scope,query,max_results,report,persist)
         scope['ddg_text']=search
         rotation=state/'native-discovery-rotation.json'
         start=json.loads(rotation.read_text(encoding='utf-8')).get('cursor',0) if rotation.exists() else 0
