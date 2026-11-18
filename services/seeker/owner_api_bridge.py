@@ -82,6 +82,7 @@ class MultiSourceSellerMixin:
         from browser_driver import Held, RunLimitReached
         from ebay_api import ApiStop
         from lead_navigation import classify
+        from seller_relevance import score as relevance_score
         rows = []
         for provider in ('public', 'ebay'):
             self.boundary()
@@ -97,6 +98,9 @@ class MultiSourceSellerMixin:
                     provider=provider, results=found))
                 for row in found:
                     kind, reason = classify(row)
+                    relevance, evidence_reason = relevance_score(query, row)
+                    if kind == 'ad' and not relevance:
+                        kind, reason = 'skip', evidence_reason
                     if kind != 'ad':
                         self.r['screening'].append(dict(side='seller', url=row['url'],
                             phase='pre_navigation', reason=reason))
