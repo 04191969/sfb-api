@@ -50,6 +50,20 @@ def directory_links(markup,url):
 
 def original_post(markup,url,directory_title=""):
  soup=BeautifulSoup(markup,'html.parser');heading=soup.find('h1')
+ # YaBB uses a per-post header, not h1. Require the opening-post anchor 0.
+ if 'yabb' in urlsplit(url).path.lower():
+  anchor=soup.find('a',attrs={'name':'0'})
+  row=anchor.find_parent('tr') if anchor else None
+  message=row.select_one('div.message') if row else None
+  header=row.select_one('.dividerbot') if row else None
+  subject=header.find('b') if header else None
+  if not message or not subject:raise ValueError('YaBB opening post not present; reply page not substituted')
+  for junk in message.select('blockquote,.quote,.signature,script,style'):junk.decompose()
+  title=subject.get_text(' ',strip=True);body=message.get_text('\n',strip=True);text=title+'\n'+body
+  if not BUY.search(text):raise ValueError('Original text has no buying-request wording')
+  if CLOSED.search(text):raise ValueError('Original request says fulfilled or withdrawn')
+  stamp=re.search(r'\b\d{2}/\d{2}/\d{2} at \d{2}:\d{2}:\d{2}',header.get_text(' ',strip=True))
+  return dict(url=url,title=title,original_post=body,text=text,source_sha256=hashlib.sha256(text.encode()).hexdigest(),posted_at=None,posted_at_raw=stamp.group() if stamp else None,status='buyer_post_candidate',availability='unconfirmed',limitations=['Opening post only. Timestamp retained verbatim; timezone unknown.','Age, replies and current buying intent require subsequent review.'])
  if not heading:raise ValueError('No original thread title')
  title=heading.get_text(' ',strip=True)
  main=soup.select_one('#ipsLayout_mainArea, main, #content') or soup
@@ -83,8 +97,9 @@ def walk(seeds,fetch,state,report,persist,max_pages=20,max_ads_per_source=2):
    continue
   visited.add(url);opened+=1
   if entry['kind']=='post':per_source[source]=per_source.get(source,0)+1
+  event=dict(url=url,origin=source,kind=entry['kind'],outcome='attempted');report['pages'].append(event)
   try:
-   page=fetch(url);event=dict(url=url,origin=source,kind=entry['kind'],http_status=page['status'],final_url=page.get('url',url));report['pages'].append(event)
+   page=fetch(url);event.update(http_status=page['status'],final_url=page.get('url',url),outcome='read')
    if page['status']!=200:raise ValueError('HTTP '+str(page['status'])+'; not treated as readable evidence')
    final=page.get('url',url)
    if urlsplit(final).hostname!=urlsplit(url).hostname:raise ValueError('Cross-site redirect; no evidence accepted')
@@ -111,6 +126,7 @@ def walk(seeds,fetch,state,report,persist,max_pages=20,max_ads_per_source=2):
    else:
     candidate=original_post(page['html'],final,entry.get('directory_title',''));candidate['discovery_url']=source;report['buyers'].append(candidate)
   except Exception as exc:
+   event['outcome']='timed_out' if 'Timeout' in type(exc).__name__ else ('blocked' if event.get('http_status') in (401,403,429) else ('read_but_unsupported' if event.get('http_status')==200 else 'fetch_failed'))
    report['failures'].append(dict(url=url,kind=entry['kind'],reason=type(exc).__name__+': '+str(exc)))
   save()
  save();report['pending_count']=len(queue);report['opened_this_run']=opened

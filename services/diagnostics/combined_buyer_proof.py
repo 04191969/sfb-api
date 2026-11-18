@@ -1,5 +1,5 @@
 """Isolated broad-search + rotating-board evidence probe. No production imports."""
-import argparse,json,hashlib,time,zipfile
+import argparse,json,hashlib,time,zipfile,re
 from pathlib import Path
 from urllib.parse import urlencode,urlsplit
 from bs4 import BeautifulSoup
@@ -28,6 +28,14 @@ def prepare(state,seeds,selected):
   if u not in visited and u not in queued:
    pending.append({'url':u,'kind':'directory','origin':u});queued.add(u)
  state.update(pending=pending,visited=sorted(visited))
+
+def prioritize_direct(state):
+ # URL shape selects navigation order only; it never establishes buyer status.
+ def direct(e):
+  u=e['url']
+  return e.get('kind')=='post' or bool(re.search(r'/(?:threads?|topics?|post|comments)/|[?&]num=|/[^/?]+-\d{5,}/?$',u,re.I))
+ pending=state.get('pending',[])
+ state['pending']=[e for e in pending if direct(e)]+[e for e in pending if not direct(e)]
 
 def rotate(state,count=2):
  boards=state.setdefault('boards',list(INITIAL_BOARDS));offset=state.get('board_cursor',0)
@@ -88,6 +96,7 @@ def execute(out,state_path):
       report['searches'].append(row);save()
       print('  '+str(len(row['extracted_results']))+' result links',flush=True)
     prepare(broad,seeds,[])
+    prioritize_direct(broad)
     before=len(report['pages']);walk([],fetch,broad,report,save,max_pages=6,max_ads_per_source=2)
     for e in report['pages'][before:]:e['route']='broad_search'
     board_state['visited']=sorted(set(board_state.get('visited',[]))|set(broad.get('visited',[])))
