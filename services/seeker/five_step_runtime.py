@@ -14,7 +14,7 @@ def execute(control):
     import v2_bridge as locked
     automatic_run.locked = locked
     from public_search_adapter import PublicSearchBrowser
-    from owner_api_bridge import OwnerApiBridge, observe_completion
+    from owner_api_bridge import OwnerApiBridge, MultiSourceSellerMixin, observe_completion
     from railway_ebay_transport import relay_options
     from supabase import create_client
     sb = create_client('https://fyxglozykvhrfejrcrqz.supabase.co', os.environ['SUPABASE_KEY'])
@@ -25,7 +25,7 @@ def execute(control):
     # validation, local ledger and live provenance stay on the inherited path.
     from continuation import ContinuationMixin
     from broad_discovery import BroadDiscoveryMixin
-    class ReservedRun(BroadDiscoveryMixin, ContinuationMixin, OwnerApiBridge, factory):
+    class ReservedRun(BroadDiscoveryMixin, ContinuationMixin, MultiSourceSellerMixin, OwnerApiBridge, factory):
         def __init__(self, *args, **kwargs):
             # Supply the browser before ApiRun wraps it for API seller details.
             super().__init__(*args, public_browser=PublicSearchBrowser, handoff=locked.handoff, **kwargs)

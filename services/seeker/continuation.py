@@ -152,7 +152,11 @@ class ContinuationMixin:
        score=len(tokens(row.get('title','')+' '+row.get('snippet',''))&terms)
        if score and not WANTED.search(row.get('title','')):leads.append((score,row))
       counts['eligible_candidates']+=len(leads);self.r['seller_link_count']=counts['eligible_candidates']
-      leads=sorted(leads,key=lambda x:-x[0]);position=0
+      leads=sorted(leads,key=lambda x:-x[0])
+      if hasattr(self,'prepare_seller_sources'):
+       from owner_api_bridge import diverse_leads
+       leads=diverse_leads(leads)
+      position=0
       while position<len(leads):
        score,row=leads[position];position+=1
        self.boundary()
@@ -226,11 +230,12 @@ class ContinuationMixin:
         self.r['selection'].update(status='selected',disclosure=SELECTION_DONE,selected_url=seller['url'],query=q,query_number=query_number,query_candidate_position=position,overall_processing_position=counts['candidates_considered'],before_selection=before)
         self.event('Seller candidate outcome',url=row['url'],outcome='selected')
         self.event('Seller selected',url=row['url'],query_number=query_number,remaining_queries_not_processed=len(queries)-query_number,remaining_eligible_candidates_not_processed=len(leads)-position)
-        seller['source_coverage']='eBay item API response; seller description plus labeled returned item fields'
-        seller['limitations']=['Retrieved through eBay Browse API, not a rendered browser page.',
-          'Description HTML converted to text without summarization; raw item response retained.',
-          'Only one search page per reader query; variation-specific items unsupported.',
-          'API fields are source evidence, not independent confirmation of availability or suitability.']
+        if page.get('extraction') == 'ebay_browse_item':
+         seller['source_coverage']='eBay item API response; seller description plus labeled returned item fields'
+         seller['limitations']=['Retrieved through eBay Browse API, not a rendered browser page.',
+           'Description HTML converted to text without summarization; raw item response retained.',
+           'Only one search page per reader query; variation-specific items unsupported.',
+           'API fields are source evidence, not independent confirmation of availability or suitability.']
         yield seller
        except RunLimitReached as e:
         if is_directory:summary.update(status='run_limit_reached',reason=str(e))
@@ -263,6 +268,7 @@ class ContinuationMixin:
      remaining=[key for key in deferred if key not in processed]
      self.r['directory_traversal']['unvisited_due_to_directory_caps']=remaining
      if remaining:raise RunLimitReached('Three-listing directory cap reached; eligible individual listings remain unvisited')
+     if self.r.get('seller_search_failures'):raise Held('Public/API seller search incomplete; see seller_search_failures')
      self.event('Seller queries exhausted for buyer',buyer_url=buyer['url'])
      self.persist();return None
 
@@ -315,8 +321,9 @@ class ContinuationMixin:
             self.event('Opening public browser')
             with self.browser_factory() as browser:
                 self.browser = browser
-                self.event('Checking eBay API authentication')
-                self.api.authenticate()
+                self.event('Preparing seller sources')
+                if hasattr(self,'prepare_seller_sources'):self.prepare_seller_sources()
+                else:self.api.authenticate()
                 self.r['steps']['find_wtb'] = 'running'
                 if search_only:
                     found = next(self.iter_buyers(), None)

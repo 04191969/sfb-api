@@ -14,6 +14,7 @@ class Factory:
   self.folder=Path(folder);self.folder.mkdir(parents=True)
   self.handoff=kwargs['handoff'];self.r={'ebay_api':{}}
   self.buyer_screen=MagicMock()
+  self.browser_factory=MagicMock()
   self.route=types.SimpleNamespace(model_transport=lambda *a: fixtures.reading())
   self.route.model=lambda *a:self.route.model_transport(*a)
  def persist(self):pass
