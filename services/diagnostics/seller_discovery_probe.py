@@ -59,6 +59,14 @@ def run_case(browser, query, classify, tokens, record, wanted, limit=9):
     return result
 
 
+def verify_component(component, manifest):
+    # Same CRLF normalization as runtime.load_release and build-release.py.
+    for name, digest in manifest['files'].items():
+        data = (component/name).read_bytes().replace(b'\r\n', b'\n')
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError('Component integrity mismatch: '+name)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--component', type=Path)
@@ -82,9 +90,7 @@ def main():
         manifest = json.loads((component/'release.json').read_text(encoding='utf-8'))
         report['release'] = manifest
         # Match the installed immutable release, not another checkout's adapter.
-        for name, digest in manifest['files'].items():
-            if hashlib.sha256((component/name).read_bytes()).hexdigest()!=digest:
-                raise ValueError('Component integrity mismatch: '+name)
+        verify_component(component, manifest)
         sys.path.insert(1, str(package))
         from public_search_adapter import PublicSearchBrowser
         from lead_navigation import classify

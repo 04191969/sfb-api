@@ -1,5 +1,7 @@
 import importlib.util
 import re
+import hashlib
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -10,6 +12,23 @@ spec=importlib.util.spec_from_file_location('probe',Path(__file__).with_name('se
 p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
 class RunLimitReached(Exception):pass
 class ProbeTests(unittest.TestCase):
+    def test_component_hash_accepts_lf_and_windows_crlf(self):
+        source=b"x = 1\nprint(x)\n"
+        manifest={'files':{'example.py':hashlib.sha256(source).hexdigest()}}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            for content in (source,source.replace(b'\n',b'\r\n')):
+                (root/'example.py').write_bytes(content)
+                p.verify_component(root,manifest)
+    def test_component_hash_rejects_real_edit(self):
+        source=b"x = 1\n"
+        manifest={'files':{'example.py':hashlib.sha256(source).hexdigest()}}
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'example.py').write_bytes(b"x = 2\r\n")
+            with self.assertRaisesRegex(ValueError,'Component integrity mismatch'):
+                p.verify_component(root,manifest)
+
     def run_probe(self, rows, visit):
         browser=SimpleNamespace(search=lambda q:rows,visit=visit)
         return p.run_case(browser,'guitar',lambda r:('ad','test'),lambda s:set(s.split()),lambda page,side:page,re.compile('WTB'))
