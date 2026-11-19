@@ -57,6 +57,7 @@ urlpatterns = [
     path('api/seeker/runs/', views.seeker_runs, name='seeker-runs'),
     path('api/seeker/markets/<str:market_id>/', views.seeker_market_detail, name='seeker-market-detail'),
     path('api/seeker/status/', views.seeker_status, name='seeker-status'),
+    path('api/seeker/discovery/', views.seeker_discovery, name='seeker-discovery'),
     path('api/seeker/run/', views.seeker_run, name='seeker-run'),
     path('api/seeker/runs/<str:run_id>/', views.seeker_run_detail, name='seeker-run-detail'),
 

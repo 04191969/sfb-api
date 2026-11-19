@@ -547,6 +547,20 @@ def is_market_discovery(run):
     return str((run or {}).get("search_query") or "").startswith("Market discovery\n")
 
 
+def assigned_component(run):
+    """Same split as public.sfb_run_component.
+
+    A consumer search with text belongs to Live Matches. A blank manual job,
+    and every market or recheck job, belongs to Seeker.
+    """
+    run = run or {}
+    kind = run.get("job_kind") or "consumer_search"
+    query = str(run.get("search_query") or "").strip()
+    if run.get("market_id") is None and kind == "consumer_search" and query:
+        return "live_matches"
+    return "seeker"
+
+
 def present_run(run):
     """Status the page can show without inventing a result."""
     row = dict(run or {})
@@ -563,4 +577,6 @@ def present_run(run):
     row["phase"] = phase
     row["label"] = label
     row["animate"] = animate
+    row["component"] = assigned_component(row)
+    row["job_id"] = row.get("id")
     return row

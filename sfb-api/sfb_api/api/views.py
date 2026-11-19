@@ -7,6 +7,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .matcher import analyze_match
+from .seeker_manual import (
+    SEEKER_QUERY_REJECTED,
+    decide_manual_seeker,
+    present_seeker_job,
+    review_result,
+    seeker_worker_report,
+)
 from .seeker_markets import (
     DEFAULT_DISCOVERY_MINUTES,
     DEFAULT_RECHECK_HOURS,
@@ -224,6 +231,95 @@ def _scheduled_job_running(sb):
 
 def _pause_report(sb):
     return pause_report(_pause_row(sb), _scheduled_job_running(sb))
+
+
+def _seeker_worker_rows(sb):
+    try:
+        rows = (
+            sb.table("sfb_component_workers")
+            .select("worker_id,seen_at,code_version,v2_version")
+            .eq("component", "seeker")
+            .execute()
+            .data
+            or []
+        )
+        if rows:
+            return rows
+    except Exception:
+        rows = []
+    try:
+        return (
+            sb.table("seeker_worker_heartbeat")
+            .select("worker_id,seen_at,revision,code_version,detail")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def _open_runs(sb):
+    try:
+        return (
+            sb.table("seeker_runs")
+            .select("*")
+            .in_("status", ["pending", "running"])
+            .order("requested_at")
+            .limit(50)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        rows = sb.table("seeker_runs").select("*").order("requested_at").limit(50).execute().data or []
+        return [row for row in rows if row.get("status") in ("pending", "running")]
+
+
+def _saved_review(sb, run):
+    match = None
+    match_id = (run or {}).get("match_id")
+    if match_id:
+        try:
+            found = (
+                sb.table("matches")
+                .select("id,status,match_decision")
+                .eq("id", match_id)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            match = found[0] if found else None
+        except Exception:
+            match = None
+    return review_result(run, match)
+
+
+def _blank_seeker_response(sb):
+    """Create the verified blank Seeker job, or return the one already active."""
+    pause = _pause_row(sb)
+    paused = True if pause is None else bool(pause.get("paused"))
+    decision = decide_manual_seeker(None, _open_runs(sb), _seeker_worker_rows(sb), paused)
+    if decision["action"] == "offline":
+        return Response(
+            {"error": decision["error"], "component": "seeker", "worker": decision["worker"]},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    if decision["action"] == "existing":
+        body = present_seeker_job(
+            decision["run"],
+            decision["worker"],
+            _saved_review(sb, decision["run"]),
+            duplicate=True,
+        )
+        return Response(body, status=status.HTTP_200_OK)
+    created = sb.table("seeker_runs").insert(decision["row"]).execute()
+    saved = created.data[0] if created.data else decision["row"]
+    return Response(
+        present_seeker_job(saved, decision["worker"], review=None, duplicate=False),
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(["GET", "POST"])
@@ -504,17 +600,55 @@ def seeker_status(request):
 
     if not result.data:
         return Response({"status": "idle"})
-    return Response(present_run(result.data[0]))
+    return Response(_present_tracked_run(sb, result.data[0]))
+
+
+def _posted_query(request):
+    search_query = request.data.get("search_query")
+    if isinstance(search_query, str):
+        return search_query.strip() or None
+    return None
+
+
+def _present_tracked_run(sb, row):
+    body = present_run(row)
+    if body.get("component") != "seeker":
+        return body
+    body["worker"] = seeker_worker_report(_seeker_worker_rows(sb))
+    body["review"] = _saved_review(sb, row)
+    body["job_id"] = body.get("id")
+    return body
+
+
+@api_view(["POST"])
+def seeker_discovery(request):
+    """Queue one blank manual Seeker job. A consumer query is not accepted."""
+    if _posted_query(request):
+        return Response(
+            {"error": SEEKER_QUERY_REJECTED, "component": "seeker"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        sb = get_supabase()
+        return _blank_seeker_response(sb)
+    except Exception as exc:
+        return _server_error(exc)
 
 
 @api_view(["POST"])
 def seeker_run(request):
-    """Insert a pending seeker_runs row for the Windows poller to pick up."""
-    search_query = request.data.get("search_query")
-    if isinstance(search_query, str):
-        search_query = search_query.strip() or None
-    else:
-        search_query = None
+    """Insert a pending seeker_runs row for the Windows poller to pick up.
+
+    A blank query uses the verified Seeker route. A query with text stays the
+    Live Matches consumer search this endpoint already created.
+    """
+    search_query = _posted_query(request)
+    if search_query is None:
+        try:
+            sb = get_supabase()
+            return _blank_seeker_response(sb)
+        except Exception as exc:
+            return _server_error(exc)
 
     user_id = request.data.get("user_id")
     if not isinstance(user_id, str) or not user_id.strip():
@@ -555,7 +689,7 @@ def seeker_run_detail(request, run_id):
 
     if not result.data:
         return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
-    return Response(present_run(result.data[0]))
+    return Response(_present_tracked_run(sb, result.data[0]))
 
 
 # ── Live Matcher ──
